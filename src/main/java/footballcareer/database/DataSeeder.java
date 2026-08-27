@@ -1,6 +1,7 @@
 package footballcareer.database;
 
 import footballcareer.model.League;
+import footballcareer.model.Competition;
 import footballcareer.model.Player;
 import footballcareer.model.Season;
 import footballcareer.model.Team;
@@ -26,6 +27,10 @@ public class DataSeeder {
         PlayerRepository playerRepository = new PlayerRepository();
         PlayerTeamRepository playerTeamRepository =
                 new PlayerTeamRepository();
+        CompetitionRepository competitionRepository =
+                new CompetitionRepository();
+        CompetitionTeamRepository competitionTeamRepository =
+                new CompetitionTeamRepository();
 
         Map<String, Season> seasons =
                 seedSeasons(seasonRepository);
@@ -35,12 +40,143 @@ public class DataSeeder {
         Map<String, Team> teams =
                 seedTeams(teamRepository);
 
+        Map<String, Competition> competitions =
+                seedCompetitions(
+                        competitionRepository,
+                        seasons
+                );
+
+        seedCompetitionTeams(
+                competitionTeamRepository,
+                competitions,
+                teams
+        );
+
         seedPlayers(
                 playerRepository,
                 playerTeamRepository,
                 seasons,
                 teams
         );
+    }
+
+    private static Map<String, Competition> seedCompetitions(
+            CompetitionRepository repository,
+            Map<String, Season> seasons
+    ) {
+
+        Map<String, Competition> competitions = new HashMap<>();
+
+        try (BufferedReader reader =
+                     openFile("data/competitions.csv")) {
+
+            String line = reader.readLine();
+
+            while ((line = reader.readLine()) != null) {
+
+                if (line.isBlank()) {
+                    continue;
+                }
+
+                String[] data = line.split(",", -1);
+                String name = data[0];
+                String seasonKey = data[3];
+                Season season = seasons.get(seasonKey);
+
+                if (season == null) {
+                    throw new RuntimeException(
+                            "Season not found: " + seasonKey
+                    );
+                }
+
+                Competition competition =
+                        repository.findByNameAndSeason(
+                                name,
+                                season.getId()
+                        );
+
+                if (competition == null) {
+                    competition = new Competition(
+                            0,
+                            name,
+                            data[1],
+                            Integer.parseInt(data[2]),
+                            season
+                    );
+
+                    repository.save(competition);
+                }
+
+                competitions.put(
+                        competitionKey(name, seasonKey),
+                        competition
+                );
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Could not seed competitions.",
+                    e
+            );
+        }
+
+        return competitions;
+    }
+
+    private static void seedCompetitionTeams(
+            CompetitionTeamRepository repository,
+            Map<String, Competition> competitions,
+            Map<String, Team> teams
+    ) {
+
+        try (BufferedReader reader =
+                     openFile("data/competition_teams.csv")) {
+
+            String line = reader.readLine();
+
+            while ((line = reader.readLine()) != null) {
+
+                if (line.isBlank()) {
+                    continue;
+                }
+
+                String[] data = line.split(",", -1);
+                Competition competition = competitions.get(
+                        competitionKey(data[0], data[1])
+                );
+                Team team = teams.get(data[2]);
+
+                if (competition == null) {
+                    throw new RuntimeException(
+                            "Competition not found: " + data[0]
+                    );
+                }
+
+                if (team == null) {
+                    throw new RuntimeException(
+                            "Team not found: " + data[2]
+                    );
+                }
+
+                repository.addTeamToCompetition(
+                        competition.getId(),
+                        team.getId()
+                );
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Could not seed competition teams.",
+                    e
+            );
+        }
+    }
+
+    private static String competitionKey(
+            String competitionName,
+            String seasonKey
+    ) {
+        return competitionName + "|" + seasonKey;
     }
 
     private static Map<String, Season> seedSeasons(

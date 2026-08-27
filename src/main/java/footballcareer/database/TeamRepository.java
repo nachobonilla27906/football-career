@@ -6,6 +6,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TeamRepository {
 
@@ -101,6 +103,34 @@ public class TeamRepository {
         } catch (SQLException e) {
             throw new RuntimeException(
                     "Could not find team by short name.",
+                    e
+            );
+        }
+    }
+
+    public List<Team> findAll() {
+
+        String sql = """
+                SELECT *
+                FROM teams
+                ORDER BY name
+                """;
+
+        List<Team> teams = new ArrayList<>();
+
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+
+            while (resultSet.next()) {
+                teams.add(mapTeam(resultSet));
+            }
+
+            return teams;
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Could not find teams.",
                     e
             );
         }

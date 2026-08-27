@@ -82,6 +82,28 @@ public class DataSeederTest {
                     6,
                     playerTeams.getInt(1)
             );
+
+            ResultSet competitions = statement.executeQuery(
+                    "SELECT COUNT(*) FROM competitions"
+            );
+
+            competitions.next();
+
+            assertEquals(
+                    5,
+                    competitions.getInt(1)
+            );
+
+            ResultSet competitionTeams = statement.executeQuery(
+                    "SELECT COUNT(*) FROM competition_teams"
+            );
+
+            competitionTeams.next();
+
+            assertEquals(
+                    15,
+                    competitionTeams.getInt(1)
+            );
         }
     }
 
@@ -147,6 +169,28 @@ public class DataSeederTest {
             assertEquals(
                     6,
                     playerTeams.getInt(1)
+            );
+
+            ResultSet competitions = statement.executeQuery(
+                    "SELECT COUNT(*) FROM competitions"
+            );
+
+            competitions.next();
+
+            assertEquals(
+                    5,
+                    competitions.getInt(1)
+            );
+
+            ResultSet competitionTeams = statement.executeQuery(
+                    "SELECT COUNT(*) FROM competition_teams"
+            );
+
+            competitionTeams.next();
+
+            assertEquals(
+                    15,
+                    competitionTeams.getInt(1)
             );
         }
     }

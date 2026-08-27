@@ -51,9 +51,29 @@ public class CareerRepository {
     public Career findById(long id) {
 
         String sql = """
-                SELECT *
-                FROM careers
-                WHERE id = ?
+                SELECT
+                    c.id,
+                    c.manager_name,
+                    c.current_date,
+                    t.id AS team_id,
+                    t.name AS team_name,
+                    t.short_name,
+                    t.country AS team_country,
+                    t.stadium_name,
+                    t.stadium_capacity,
+                    t.reputation,
+                    s.id AS season_id,
+                    s.start_year,
+                    s.end_year,
+                    s.start_date,
+                    s.end_date,
+                    s.finished
+                FROM careers c
+                JOIN teams t
+                    ON c.controlled_team_id = t.id
+                JOIN seasons s
+                    ON c.current_season_id = s.id
+                WHERE c.id = ?
                 """;
 
         try (Connection connection = Database.getConnection();
@@ -67,14 +87,29 @@ public class CareerRepository {
                     return null;
                 }
 
-                Team controlledTeam = new Team();
-                controlledTeam.setId(
-                        resultSet.getLong("controlled_team_id")
+                Team controlledTeam = new Team(
+                        resultSet.getLong("team_id"),
+                        resultSet.getString("team_name"),
+                        resultSet.getString("short_name"),
+                        resultSet.getString("team_country"),
+                        resultSet.getString("stadium_name"),
+                        resultSet.getInt("stadium_capacity"),
+                        resultSet.getInt("reputation")
                 );
 
-                Season currentSeason = new Season();
-                currentSeason.setId(
-                        resultSet.getLong("current_season_id")
+                Season currentSeason = new Season(
+                        resultSet.getLong("season_id"),
+                        resultSet.getInt("start_year"),
+                        resultSet.getInt("end_year"),
+                        LocalDate.parse(
+                                resultSet.getString("start_date")
+                        ),
+                        LocalDate.parse(
+                                resultSet.getString("end_date")
+                        )
+                );
+                currentSeason.setFinished(
+                        resultSet.getInt("finished") == 1
                 );
 
                 return new Career(
@@ -90,6 +125,39 @@ public class CareerRepository {
 
         } catch (SQLException e) {
             throw new RuntimeException("Could not find career.", e);
+        }
+    }
+
+    public void updateCurrentDate(Career career) {
+
+        String sql = """
+                UPDATE careers
+                SET current_date = ?
+                WHERE id = ?
+                """;
+
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(
+                    1,
+                    career.getCurrentDate().toString()
+            );
+            statement.setLong(2, career.getId());
+
+            int updatedRows = statement.executeUpdate();
+
+            if (updatedRows == 0) {
+                throw new IllegalArgumentException(
+                        "Career does not exist."
+                );
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Could not update career date.",
+                    e
+            );
         }
     }
 }

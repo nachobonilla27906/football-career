@@ -97,11 +97,13 @@ public class CareerServiceTest {
 
     @Test
     void shouldAdvanceCareerOneDay() {
+        Team team = createTeam();
+        Season season = createSeason();
 
-        Career career = new Career();
-
-        career.setCurrentDate(
-                LocalDate.of(2026, 8, 15)
+        Career career = careerService.createCareer(
+                "Nacho",
+                team.getId(),
+                season.getId()
         );
 
         careerService.advanceDay(career);
@@ -110,5 +112,41 @@ public class CareerServiceTest {
                 LocalDate.of(2026, 8, 16),
                 career.getCurrentDate()
         );
+
+        Career loadedCareer =
+                careerService.loadCareer(career.getId());
+
+        assertEquals(
+                LocalDate.of(2026, 8, 16),
+                loadedCareer.getCurrentDate()
+        );
+    }
+
+    private Team createTeam() {
+        Team team = new Team(
+                0,
+                "Valencia CF",
+                "VCF",
+                "Spain",
+                "Mestalla",
+                49430,
+                80
+        );
+
+        new TeamRepository().save(team);
+        return team;
+    }
+
+    private Season createSeason() {
+        Season season = new Season(
+                0,
+                2026,
+                2027,
+                LocalDate.of(2026, 8, 15),
+                LocalDate.of(2027, 5, 30)
+        );
+
+        new SeasonRepository().save(season);
+        return season;
     }
 }

@@ -8,6 +8,7 @@ import footballcareer.model.Season;
 import footballcareer.model.Team;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public class CareerService {
 
@@ -30,6 +31,12 @@ public class CareerService {
             long teamId,
             long seasonId
     ) {
+
+        if (managerName == null || managerName.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Manager name is required."
+            );
+        }
 
         Team team = teamRepository.findById(teamId);
 
@@ -75,9 +82,28 @@ public class CareerService {
 
     public void advanceDay(Career career) {
 
+        if (career.getId() <= 0) {
+            throw new IllegalArgumentException(
+                    "Career must be saved before advancing time."
+            );
+        }
+
         LocalDate nextDate =
                 career.getCurrentDate().plusDays(1);
 
+        if (nextDate.isAfter(
+                career.getCurrentSeason().getEndDate()
+        )) {
+            throw new IllegalStateException(
+                    "Career has reached the end of the season."
+            );
+        }
+
         career.setCurrentDate(nextDate);
+        careerRepository.updateCurrentDate(career);
+    }
+
+    public List<Team> getAvailableTeams() {
+        return teamRepository.findAll();
     }
 }
