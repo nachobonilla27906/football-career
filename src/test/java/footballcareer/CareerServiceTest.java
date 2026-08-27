@@ -122,6 +122,22 @@ public class CareerServiceTest {
         );
     }
 
+    @Test
+    void shouldAdvanceSeveralDaysAndPersistFinalDate() {
+        Team team = createTeam();
+        Season season = createSeason();
+        Career career = careerService.createCareer(
+                "Nacho", team.getId(), season.getId());
+
+        careerService.advanceDays(career, 10);
+
+        assertEquals(LocalDate.of(2026, 8, 25), career.getCurrentDate());
+        assertEquals(career.getCurrentDate(),
+                careerService.loadCareer(career.getId()).getCurrentDate());
+        assertThrows(IllegalArgumentException.class,
+                () -> careerService.advanceDays(career, 0));
+    }
+
     private Team createTeam() {
         Team team = new Team(
                 0,

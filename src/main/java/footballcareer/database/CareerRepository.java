@@ -160,4 +160,22 @@ public class CareerRepository {
             );
         }
     }
+
+    public void updateSeasonAndDate(Career career) {
+        String sql = """
+                UPDATE careers SET current_season_id = ?, current_date = ?
+                WHERE id = ?
+                """;
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, career.getCurrentSeason().getId());
+            statement.setString(2, career.getCurrentDate().toString());
+            statement.setLong(3, career.getId());
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalArgumentException("Career does not exist.");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not update career season.", e);
+        }
+    }
 }

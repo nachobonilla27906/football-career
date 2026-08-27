@@ -99,6 +99,33 @@ public class SeasonRepository {
         }
     }
 
+    public Season findByYears(int startYear, int endYear) {
+        String sql = "SELECT * FROM seasons WHERE start_year = ? AND end_year = ? LIMIT 1";
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, startYear);
+            statement.setInt(2, endYear);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? mapSeason(resultSet) : null;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not find season by years.", e);
+        }
+    }
+
+    public void markFinished(long seasonId) {
+        String sql = "UPDATE seasons SET finished = 1 WHERE id = ?";
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, seasonId);
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalArgumentException("Season does not exist.");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not finish season.", e);
+        }
+    }
+
     private Season mapSeason(ResultSet resultSet) throws SQLException {
 
         Season season = new Season();

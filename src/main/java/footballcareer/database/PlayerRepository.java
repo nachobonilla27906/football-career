@@ -195,6 +195,19 @@ public class PlayerRepository {
         }
     }
 
+    public List<Player> findAll() {
+        String sql = "SELECT * FROM players ORDER BY id";
+        List<Player> players = new ArrayList<>();
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) players.add(mapPlayer(resultSet));
+            return players;
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not find all players.", e);
+        }
+    }
+
     public void updateDevelopment(Player player) {
         String sql = """
                 UPDATE players SET overall = ?, pace = ?, shooting = ?,

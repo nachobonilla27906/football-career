@@ -15,7 +15,8 @@ public class CareerService {
     private final CareerRepository careerRepository;
     private final TeamRepository teamRepository;
     private final SeasonRepository seasonRepository;
-    private final MatchDayService matchDayService;
+    private final WorldSimulationService worldSimulationService;
+    private final SeasonTransitionService seasonTransitionService;
 
     public CareerService(
             CareerRepository careerRepository,
@@ -34,7 +35,11 @@ public class CareerService {
         this.careerRepository = careerRepository;
         this.teamRepository = teamRepository;
         this.seasonRepository = seasonRepository;
-        this.matchDayService = matchDayService;
+        this.worldSimulationService = new WorldSimulationService(matchDayService);
+        this.seasonTransitionService = new SeasonTransitionService(
+                seasonRepository, new footballcareer.database.CompetitionRepository(),
+                new footballcareer.database.CompetitionTeamRepository(),
+                careerRepository, new FootballWorldService());
     }
 
     public Career createCareer(
@@ -105,16 +110,24 @@ public class CareerService {
         if (nextDate.isAfter(
                 career.getCurrentSeason().getEndDate()
         )) {
-            throw new IllegalStateException(
-                    "Career has reached the end of the season."
-            );
+            seasonTransitionService.startNextSeason(career);
+            return;
         }
 
         career.setCurrentDate(nextDate);
         careerRepository.updateCurrentDate(career);
 
-        if (matchDayService != null) {
-            matchDayService.processMatchesOn(nextDate);
+        worldSimulationService.processDate(nextDate,
+                career.getCurrentSeason().getId(),
+                career.getControlledTeam().getId());
+    }
+
+    public void advanceDays(Career career, int days) {
+        if (days <= 0) {
+            throw new IllegalArgumentException("Days to advance must be positive.");
+        }
+        for (int day = 0; day < days; day++) {
+            advanceDay(career);
         }
     }
 

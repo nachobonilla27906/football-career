@@ -56,6 +56,18 @@ public class PlayerStateRepository {
         }
     }
 
+    public void recoverAllFitness(int amount) {
+        if (amount <= 0) throw new IllegalArgumentException("Recovery must be positive.");
+        String sql = "UPDATE player_state SET fitness = MIN(100, fitness + ?)";
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, amount);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not recover player fitness.", e);
+        }
+    }
+
     private int clamp(int value) {
         return Math.max(0, Math.min(100, value));
     }
