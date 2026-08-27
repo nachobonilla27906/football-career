@@ -65,6 +65,8 @@ public class DatabaseInitializer {
                 "player_market_status",
                 "league_standings",
                 "player_season_stats",
+                "match_team_stats",
+                "match_events",
                 "matches",
                 "player_team",
                 "competition_teams",

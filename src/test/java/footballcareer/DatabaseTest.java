@@ -33,7 +33,7 @@ class DatabaseTest {
                 tableCount++;
             }
 
-            assertEquals(17, tableCount);
+            assertEquals(19, tableCount);
         }
     }
 }

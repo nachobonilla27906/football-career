@@ -25,13 +25,37 @@ class PlayerStatsAndLineupTest {
 
     @Test
     void shouldSelectElevenIncludingGoalkeeper() {
-        List<Player> lineup = new LineupService(
+        MatchLineup matchLineup = new LineupService(
                 new PlayerRepository(), new PlayerStateRepository()
-        ).selectStartingEleven(arsenal.getId());
+        ).selectMatchLineup(arsenal.getId());
+        List<Player> lineup = matchLineup.getStarters();
 
         assertEquals(11, lineup.size());
         assertEquals(11, lineup.stream().map(Player::getId).distinct().count());
         assertTrue(lineup.stream().anyMatch(p -> p.getPosition() == Position.GK));
+        assertEquals(7, matchLineup.getSubstitutes().size());
+        assertTrue(matchLineup.getSubstitutes().stream()
+                .noneMatch(substitute -> lineup.contains(substitute)));
+    }
+
+    @Test
+    void shouldExcludePlayersWhoAreNotFitToPlay() {
+        Player unavailable = new PlayerRepository()
+                .findCurrentPlayersByTeam(arsenal.getId()).stream()
+                .filter(player -> player.getPosition() != Position.GK)
+                .findFirst().orElseThrow();
+        PlayerStateRepository states = new PlayerStateRepository();
+        PlayerState state = states.findByPlayer(unavailable.getId());
+        state.setFitness(10);
+        states.update(state);
+
+        MatchLineup lineup = new LineupService(new PlayerRepository(), states)
+                .selectMatchLineup(arsenal.getId());
+
+        assertTrue(lineup.getStarters().stream()
+                .noneMatch(player -> player.getId() == unavailable.getId()));
+        assertTrue(lineup.getSubstitutes().stream()
+                .noneMatch(player -> player.getId() == unavailable.getId()));
     }
 
     @Test

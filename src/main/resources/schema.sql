@@ -118,6 +118,44 @@ CREATE TABLE IF NOT EXISTS matches (
     UNIQUE (competition_id, home_team_id, away_team_id)
 );
 
+CREATE TABLE IF NOT EXISTS match_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_id INTEGER NOT NULL,
+    team_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    secondary_player_id INTEGER,
+    minute INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    FOREIGN KEY (match_id) REFERENCES matches(id),
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    FOREIGN KEY (player_id) REFERENCES players(id),
+    FOREIGN KEY (secondary_player_id) REFERENCES players(id),
+    CHECK (minute BETWEEN 1 AND 120),
+    CHECK (type IN ('GOAL', 'YELLOW_CARD', 'RED_CARD', 'SUBSTITUTION'))
+);
+
+CREATE TABLE IF NOT EXISTS match_team_stats (
+    match_id INTEGER NOT NULL,
+    team_id INTEGER NOT NULL,
+    possession INTEGER NOT NULL,
+    shots INTEGER NOT NULL,
+    shots_on_target INTEGER NOT NULL,
+    corners INTEGER NOT NULL,
+    fouls INTEGER NOT NULL,
+    yellow_cards INTEGER NOT NULL,
+    red_cards INTEGER NOT NULL,
+    PRIMARY KEY (match_id, team_id),
+    FOREIGN KEY (match_id) REFERENCES matches(id),
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    CHECK (possession BETWEEN 0 AND 100),
+    CHECK (shots >= 0),
+    CHECK (shots_on_target BETWEEN 0 AND shots),
+    CHECK (corners >= 0),
+    CHECK (fouls >= 0),
+    CHECK (yellow_cards >= 0),
+    CHECK (red_cards >= 0)
+);
+
 CREATE TABLE IF NOT EXISTS contracts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id INTEGER NOT NULL,
