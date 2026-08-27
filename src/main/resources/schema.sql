@@ -166,6 +166,40 @@ CREATE TABLE IF NOT EXISTS player_market_status (
     CHECK (asking_price IS NULL OR asking_price > 0)
 );
 
+CREATE TABLE IF NOT EXISTS transfer_offers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER NOT NULL,
+    buying_team_id INTEGER NOT NULL,
+    selling_team_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    offer_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    FOREIGN KEY (player_id) REFERENCES players(id),
+    FOREIGN KEY (buying_team_id) REFERENCES teams(id),
+    FOREIGN KEY (selling_team_id) REFERENCES teams(id),
+    CHECK (buying_team_id <> selling_team_id),
+    CHECK (amount > 0),
+    CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'COMPLETED'))
+);
+
+CREATE TABLE IF NOT EXISTS transfers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER NOT NULL,
+    from_team_id INTEGER NOT NULL,
+    to_team_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    transfer_date TEXT NOT NULL,
+    season_id INTEGER NOT NULL,
+    offer_id INTEGER NOT NULL UNIQUE,
+    FOREIGN KEY (player_id) REFERENCES players(id),
+    FOREIGN KEY (from_team_id) REFERENCES teams(id),
+    FOREIGN KEY (to_team_id) REFERENCES teams(id),
+    FOREIGN KEY (season_id) REFERENCES seasons(id),
+    FOREIGN KEY (offer_id) REFERENCES transfer_offers(id),
+    CHECK (from_team_id <> to_team_id),
+    CHECK (amount > 0)
+);
+
 CREATE TABLE IF NOT EXISTS player_season_stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 

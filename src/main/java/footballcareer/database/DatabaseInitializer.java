@@ -57,6 +57,8 @@ public class DatabaseInitializer {
 
         String[] tables = {
                 "careers",
+                "transfers",
+                "transfer_offers",
                 "contracts",
                 "player_state",
                 "club_finances",
