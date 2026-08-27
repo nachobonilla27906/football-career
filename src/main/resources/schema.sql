@@ -1,6 +1,6 @@
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE seasons (
+CREATE TABLE IF NOT EXISTS seasons (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     start_year INTEGER NOT NULL,
     end_year INTEGER NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE seasons (
     finished INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE players (
+CREATE TABLE IF NOT EXISTS players (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE players (
     salary REAL NOT NULL
 );
 
-CREATE TABLE teams (
+CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     short_name TEXT NOT NULL,
@@ -39,14 +39,14 @@ CREATE TABLE teams (
     reputation INTEGER NOT NULL
 );
 
-CREATE TABLE leagues (
+CREATE TABLE IF NOT EXISTS leagues (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     country TEXT NOT NULL,
     tier INTEGER NOT NULL
 );
 
-CREATE TABLE competitions (
+CREATE TABLE IF NOT EXISTS competitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     country TEXT NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE competitions (
         REFERENCES leagues(id)
 );
 
-CREATE TABLE competition_teams (
+CREATE TABLE IF NOT EXISTS competition_teams (
     competition_id INTEGER NOT NULL,
     team_id INTEGER NOT NULL,
 
@@ -74,7 +74,7 @@ CREATE TABLE competition_teams (
         REFERENCES teams(id)
 );
 
-CREATE TABLE player_team (
+CREATE TABLE IF NOT EXISTS player_team (
     player_id INTEGER NOT NULL,
     team_id INTEGER NOT NULL,
     start_date TEXT NOT NULL,
@@ -89,7 +89,7 @@ CREATE TABLE player_team (
         REFERENCES teams(id)
 );
 
-CREATE TABLE matches (
+CREATE TABLE IF NOT EXISTS matches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     competition_id INTEGER NOT NULL,
@@ -113,13 +113,11 @@ CREATE TABLE matches (
         REFERENCES teams(id),
 
     CHECK (home_team_id <> away_team_id),
-
     CHECK (home_goals >= 0),
-
     CHECK (away_goals >= 0)
 );
 
-CREATE TABLE player_season_stats (
+CREATE TABLE IF NOT EXISTS player_season_stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     player_id INTEGER NOT NULL,
@@ -157,7 +155,7 @@ CREATE TABLE player_season_stats (
     CHECK (average_rating >= 0 AND average_rating <= 10)
 );
 
-CREATE TABLE league_standings (
+CREATE TABLE IF NOT EXISTS league_standings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     competition_id INTEGER NOT NULL,
@@ -190,7 +188,7 @@ CREATE TABLE league_standings (
     CHECK (points >= 0)
 );
 
-CREATE TABLE careers (
+CREATE TABLE IF NOT EXISTS careers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     manager_name TEXT NOT NULL,

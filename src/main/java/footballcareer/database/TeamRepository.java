@@ -68,25 +68,60 @@ public class TeamRepository {
                     return null;
                 }
 
-                Team team = new Team();
-
-                team.setId(resultSet.getLong("id"));
-                team.setName(resultSet.getString("name"));
-                team.setShortName(resultSet.getString("short_name"));
-                team.setCountry(resultSet.getString("country"));
-                team.setStadiumName(resultSet.getString("stadium_name"));
-                team.setStadiumCapacity(
-                        resultSet.getInt("stadium_capacity")
-                );
-                team.setReputation(
-                        resultSet.getInt("reputation")
-                );
-
-                return team;
+                return mapTeam(resultSet);
             }
 
         } catch (SQLException e) {
             throw new RuntimeException("Could not find team.", e);
         }
+    }
+
+    public Team findByShortName(String shortName) {
+
+        String sql = """
+                SELECT *
+                FROM teams
+                WHERE short_name = ?
+                """;
+
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, shortName);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+
+                if (!resultSet.next()) {
+                    return null;
+                }
+
+                return mapTeam(resultSet);
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Could not find team by short name.",
+                    e
+            );
+        }
+    }
+
+    private Team mapTeam(ResultSet resultSet) throws SQLException {
+
+        Team team = new Team();
+
+        team.setId(resultSet.getLong("id"));
+        team.setName(resultSet.getString("name"));
+        team.setShortName(resultSet.getString("short_name"));
+        team.setCountry(resultSet.getString("country"));
+        team.setStadiumName(resultSet.getString("stadium_name"));
+        team.setStadiumCapacity(
+                resultSet.getInt("stadium_capacity")
+        );
+        team.setReputation(
+                resultSet.getInt("reputation")
+        );
+
+        return team;
     }
 }

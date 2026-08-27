@@ -18,7 +18,7 @@ class PlayerRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.initialize();
+        DatabaseInitializer.resetForTests();
         repository = new PlayerRepository();
     }
 
@@ -47,7 +47,7 @@ class PlayerRepositoryTest {
 
         repository.save(player);
 
-        Player savedPlayer = repository.findById(1);
+        Player savedPlayer = repository.findById(player.getId());
 
         assertNotNull(savedPlayer);
 
@@ -61,7 +61,11 @@ class PlayerRepositoryTest {
 
         assertEquals("Spain", savedPlayer.getNationality());
 
-        assertEquals(Position.RW, savedPlayer.getPosition());
+        assertEquals(
+                Position.RW,
+                savedPlayer.getPosition()
+        );
+
         assertEquals(
                 PreferredFoot.LEFT,
                 savedPlayer.getPreferredFoot()
@@ -77,7 +81,14 @@ class PlayerRepositoryTest {
         assertEquals(35, savedPlayer.getDefending());
         assertEquals(70, savedPlayer.getPhysical());
 
-        assertEquals(150_000_000, savedPlayer.getMarketValue());
-        assertEquals(10_000_000, savedPlayer.getSalary());
+        assertEquals(
+                150_000_000,
+                savedPlayer.getMarketValue()
+        );
+
+        assertEquals(
+                10_000_000,
+                savedPlayer.getSalary()
+        );
     }
 }

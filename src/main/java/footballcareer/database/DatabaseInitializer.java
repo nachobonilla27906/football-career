@@ -1,45 +1,51 @@
 package footballcareer.database;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.stream.Collectors;
 
 public class DatabaseInitializer {
 
     public static void initialize() {
 
-        String schema = loadSchema();
-
         try (Connection connection = Database.getConnection();
-             Statement statement = connection.createStatement()) {
+             InputStream inputStream = DatabaseInitializer.class
+                     .getClassLoader()
+                     .getResourceAsStream("schema.sql")) {
 
-            statement.executeUpdate("PRAGMA foreign_keys = ON;");
+            if (inputStream == null) {
+                throw new RuntimeException(
+                        "Could not find schema.sql."
+                );
+            }
 
-            for (String sql : schema.split(";")) {
+            String schema = new String(
+                    inputStream.readAllBytes(),
+                    StandardCharsets.UTF_8
+            );
 
-                String command = sql.trim();
+            try (Statement statement = connection.createStatement()) {
 
-                if (!command.isEmpty()
-                        && !command.equalsIgnoreCase("PRAGMA foreign_keys = ON")) {
+                statement.execute("PRAGMA foreign_keys = OFF");
 
-                    statement.executeUpdate(
-                            command.replaceFirst(
-                                    "CREATE TABLE ",
-                                    "CREATE TABLE IF NOT EXISTS "
-                            )
-                    );
+                for (String sql : schema.split(";")) {
+
+                    String trimmedSql = sql.trim();
+
+                    if (!trimmedSql.isEmpty()) {
+                        statement.execute(trimmedSql);
+                    }
                 }
+
+                statement.execute("PRAGMA foreign_keys = ON");
             }
 
             System.out.println("Database initialized successfully.");
 
-        } catch (SQLException e) {
+        } catch (IOException | SQLException e) {
             throw new RuntimeException(
                     "Could not initialize database.",
                     e
@@ -47,34 +53,42 @@ public class DatabaseInitializer {
         }
     }
 
-    private static String loadSchema() {
+    public static void resetForTests() {
 
-        try (InputStream inputStream =
-                     DatabaseInitializer.class
-                             .getClassLoader()
-                             .getResourceAsStream("schema.sql")) {
+        String[] tables = {
+                "careers",
+                "league_standings",
+                "player_season_stats",
+                "matches",
+                "player_team",
+                "competition_teams",
+                "competitions",
+                "players",
+                "teams",
+                "leagues",
+                "seasons"
+        };
 
-            if (inputStream == null) {
-                throw new IllegalStateException(
-                        "schema.sql not found in resources."
+        try (Connection connection = Database.getConnection();
+             Statement statement = connection.createStatement()) {
+
+            statement.execute("PRAGMA foreign_keys = OFF");
+
+            for (String table : tables) {
+                statement.executeUpdate(
+                        "DROP TABLE IF EXISTS " + table
                 );
             }
 
-            try (BufferedReader reader =
-                         new BufferedReader(
-                                 new InputStreamReader(
-                                         inputStream,
-                                         StandardCharsets.UTF_8))) {
+            statement.execute("PRAGMA foreign_keys = ON");
 
-                return reader.lines()
-                        .collect(Collectors.joining("\n"));
-            }
-
-        } catch (IOException e) {
+        } catch (SQLException e) {
             throw new RuntimeException(
-                    "Could not read schema.sql.",
+                    "Could not reset database for tests.",
                     e
             );
         }
+
+        initialize();
     }
 }

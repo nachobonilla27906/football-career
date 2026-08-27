@@ -67,26 +67,55 @@ public class SeasonRepository {
                     return null;
                 }
 
-                Season season = new Season();
-
-                season.setId(resultSet.getLong("id"));
-                season.setStartYear(resultSet.getInt("start_year"));
-                season.setEndYear(resultSet.getInt("end_year"));
-                season.setStartDate(
-                        LocalDate.parse(resultSet.getString("start_date"))
-                );
-                season.setEndDate(
-                        LocalDate.parse(resultSet.getString("end_date"))
-                );
-                season.setFinished(
-                        resultSet.getInt("finished") == 1
-                );
-
-                return season;
+                return mapSeason(resultSet);
             }
 
         } catch (SQLException e) {
             throw new RuntimeException("Could not find season.", e);
         }
+    }
+
+    public Season findFirst() {
+
+        String sql = """
+                SELECT *
+                FROM seasons
+                ORDER BY id
+                LIMIT 1
+                """;
+
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+
+            if (!resultSet.next()) {
+                return null;
+            }
+
+            return mapSeason(resultSet);
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not find first season.", e);
+        }
+    }
+
+    private Season mapSeason(ResultSet resultSet) throws SQLException {
+
+        Season season = new Season();
+
+        season.setId(resultSet.getLong("id"));
+        season.setStartYear(resultSet.getInt("start_year"));
+        season.setEndYear(resultSet.getInt("end_year"));
+        season.setStartDate(
+                LocalDate.parse(resultSet.getString("start_date"))
+        );
+        season.setEndDate(
+                LocalDate.parse(resultSet.getString("end_date"))
+        );
+        season.setFinished(
+                resultSet.getInt("finished") == 1
+        );
+
+        return season;
     }
 }

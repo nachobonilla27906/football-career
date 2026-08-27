@@ -1,0 +1,359 @@
+package footballcareer.database;
+
+import footballcareer.model.League;
+import footballcareer.model.Player;
+import footballcareer.model.Season;
+import footballcareer.model.Team;
+import footballcareer.model.enums.Position;
+import footballcareer.model.enums.PreferredFoot;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
+
+public class DataSeeder {
+
+    public static void seed() {
+
+        SeasonRepository seasonRepository = new SeasonRepository();
+        LeagueRepository leagueRepository = new LeagueRepository();
+        TeamRepository teamRepository = new TeamRepository();
+        PlayerRepository playerRepository = new PlayerRepository();
+        PlayerTeamRepository playerTeamRepository =
+                new PlayerTeamRepository();
+
+        Map<String, Season> seasons =
+                seedSeasons(seasonRepository);
+
+        seedLeagues(leagueRepository);
+
+        Map<String, Team> teams =
+                seedTeams(teamRepository);
+
+        seedPlayers(
+                playerRepository,
+                playerTeamRepository,
+                seasons,
+                teams
+        );
+    }
+
+    private static Map<String, Season> seedSeasons(
+            SeasonRepository repository
+    ) {
+
+        Map<String, Season> seasons = new HashMap<>();
+
+        try (BufferedReader reader =
+                     openFile("data/seasons.csv")) {
+
+            String line = reader.readLine();
+
+            while ((line = reader.readLine()) != null) {
+
+                if (line.isBlank()) {
+                    continue;
+                }
+
+                String[] data = line.split(",", -1);
+
+                int startYear = Integer.parseInt(data[0]);
+                int endYear = Integer.parseInt(data[1]);
+
+                Season season = findSeason(
+                        repository,
+                        startYear,
+                        endYear
+                );
+
+                if (season == null) {
+
+                    season = new Season();
+
+                    season.setStartYear(startYear);
+                    season.setEndYear(endYear);
+                    season.setStartDate(
+                            LocalDate.parse(data[2])
+                    );
+                    season.setEndDate(
+                            LocalDate.parse(data[3])
+                    );
+                    season.setFinished(
+                            "1".equals(data[4])
+                    );
+
+                    repository.save(season);
+                }
+
+                String key =
+                        startYear + "/" + endYear;
+
+                seasons.put(key, season);
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Could not seed seasons.",
+                    e
+            );
+        }
+
+        return seasons;
+    }
+
+    private static Season findSeason(
+            SeasonRepository repository,
+            int startYear,
+            int endYear
+    ) {
+
+        Season season = repository.findFirst();
+
+        if (season != null
+                && season.getStartYear() == startYear
+                && season.getEndYear() == endYear) {
+
+            return season;
+        }
+
+        return null;
+    }
+
+    private static Map<String, League> seedLeagues(
+            LeagueRepository repository
+    ) {
+
+        Map<String, League> leagues = new HashMap<>();
+
+        try (BufferedReader reader =
+                     openFile("data/leagues.csv")) {
+
+            String line = reader.readLine();
+
+            while ((line = reader.readLine()) != null) {
+
+                if (line.isBlank()) {
+                    continue;
+                }
+
+                String[] data = line.split(",", -1);
+
+                String name = data[0];
+                String country = data[1];
+                int tier = Integer.parseInt(data[2]);
+
+                League league =
+                        repository.findByName(
+                                name,
+                                country
+                        );
+
+                if (league == null) {
+
+                    league = new League();
+
+                    league.setName(name);
+                    league.setCountry(country);
+                    league.setTier(tier);
+
+                    repository.save(league);
+                }
+
+                leagues.put(name, league);
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Could not seed leagues.",
+                    e
+            );
+        }
+
+        return leagues;
+    }
+
+    private static Map<String, Team> seedTeams(
+            TeamRepository repository
+    ) {
+
+        Map<String, Team> teams = new HashMap<>();
+
+        try (BufferedReader reader =
+                     openFile("data/teams.csv")) {
+
+            String line = reader.readLine();
+
+            while ((line = reader.readLine()) != null) {
+
+                if (line.isBlank()) {
+                    continue;
+                }
+
+                String[] data = line.split(",", -1);
+
+                String name = data[0];
+                String shortName = data[1];
+                String country = data[2];
+
+                Team team =
+                        repository.findByShortName(
+                                shortName
+                        );
+
+                if (team == null) {
+
+                    team = new Team();
+
+                    team.setName(name);
+                    team.setShortName(shortName);
+                    team.setCountry(country);
+                    team.setStadiumName(data[3]);
+                    team.setStadiumCapacity(
+                            Integer.parseInt(data[4])
+                    );
+                    team.setReputation(
+                            Integer.parseInt(data[5])
+                    );
+
+                    repository.save(team);
+                }
+
+                teams.put(shortName, team);
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Could not seed teams.",
+                    e
+            );
+        }
+
+        return teams;
+    }
+
+    private static void seedPlayers(
+            PlayerRepository playerRepository,
+            PlayerTeamRepository playerTeamRepository,
+            Map<String, Season> seasons,
+            Map<String, Team> teams
+    ) {
+
+        Season season = seasons.values()
+                .stream()
+                .findFirst()
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "No season available for players."
+                        )
+                );
+
+        try (BufferedReader reader =
+                     openFile("data/players.csv")) {
+
+            String line = reader.readLine();
+
+            while ((line = reader.readLine()) != null) {
+
+                if (line.isBlank()) {
+                    continue;
+                }
+
+                String[] data = line.split(",", -1);
+
+                String firstName = data[0];
+                String lastName = data[1];
+
+                Player player =
+                        playerRepository.findByName(
+                                firstName,
+                                lastName
+                        );
+
+                if (player == null) {
+
+                    player = new Player(
+                            0,
+                            firstName,
+                            lastName,
+                            LocalDate.parse(data[2]),
+                            data[3],
+                            Position.valueOf(data[4]),
+                            PreferredFoot.valueOf(data[5]),
+                            Integer.parseInt(data[6]),
+                            Integer.parseInt(data[7]),
+                            Integer.parseInt(data[8]),
+                            Integer.parseInt(data[9]),
+                            Integer.parseInt(data[10]),
+                            Integer.parseInt(data[11]),
+                            Integer.parseInt(data[12]),
+                            Integer.parseInt(data[13]),
+                            Double.parseDouble(data[14]),
+                            Double.parseDouble(data[15])
+                    );
+
+                    playerRepository.save(player);
+                }
+
+                String teamShortName = data[16];
+
+                Team team = teams.get(teamShortName);
+
+                if (team == null) {
+                    throw new RuntimeException(
+                            "Team not found: "
+                                    + teamShortName
+                    );
+                }
+
+                Long currentTeamId =
+                        playerTeamRepository
+                                .findCurrentTeamId(
+                                        player.getId()
+                                );
+
+                if (currentTeamId == null) {
+
+                    playerTeamRepository.assignPlayerToTeam(
+                            player.getId(),
+                            team.getId(),
+                            season.getStartDate()
+                    );
+                }
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Could not seed players.",
+                    e
+            );
+        }
+    }
+
+    private static BufferedReader openFile(
+            String path
+    ) {
+
+        InputStream inputStream =
+                DataSeeder.class
+                        .getClassLoader()
+                        .getResourceAsStream(path);
+
+        if (inputStream == null) {
+            throw new RuntimeException(
+                    "Could not find resource: " + path
+            );
+        }
+
+        return new BufferedReader(
+                new InputStreamReader(
+                        inputStream,
+                        StandardCharsets.UTF_8
+                )
+        );
+    }
+}

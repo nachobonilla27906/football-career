@@ -1,7 +1,6 @@
 package footballcareer;
 
 import footballcareer.database.CareerRepository;
-
 import footballcareer.database.DatabaseInitializer;
 import footballcareer.database.SeasonRepository;
 import footballcareer.database.TeamRepository;
@@ -23,7 +22,7 @@ public class CareerServiceTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.initialize();
+        DatabaseInitializer.resetForTests();
 
         careerService = new CareerService(
                 new CareerRepository(),
@@ -50,8 +49,12 @@ public class CareerServiceTest {
 
         season.setStartYear(2026);
         season.setEndYear(2027);
-        season.setStartDate(LocalDate.of(2026, 8, 15));
-        season.setEndDate(LocalDate.of(2027, 5, 30));
+        season.setStartDate(
+                LocalDate.of(2026, 8, 15)
+        );
+        season.setEndDate(
+                LocalDate.of(2027, 5, 30)
+        );
         season.setFinished(false);
 
         new SeasonRepository().save(season);
@@ -65,8 +68,14 @@ public class CareerServiceTest {
         assertNotNull(career);
         assertTrue(career.getId() > 0);
         assertEquals("Nacho", career.getManagerName());
-        assertEquals(team.getId(), career.getControlledTeam().getId());
-        assertEquals(season.getId(), career.getCurrentSeason().getId());
+        assertEquals(
+                team.getId(),
+                career.getControlledTeam().getId()
+        );
+        assertEquals(
+                season.getId(),
+                career.getCurrentSeason().getId()
+        );
         assertEquals(
                 LocalDate.of(2026, 8, 15),
                 career.getCurrentDate()
@@ -76,8 +85,14 @@ public class CareerServiceTest {
                 careerService.loadCareer(career.getId());
 
         assertNotNull(loadedCareer);
-        assertEquals(career.getId(), loadedCareer.getId());
-        assertEquals("Nacho", loadedCareer.getManagerName());
+        assertEquals(
+                career.getId(),
+                loadedCareer.getId()
+        );
+        assertEquals(
+                "Nacho",
+                loadedCareer.getManagerName()
+        );
     }
 
     @Test

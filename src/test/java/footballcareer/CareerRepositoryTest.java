@@ -3,6 +3,7 @@ package footballcareer;
 import footballcareer.database.CareerRepository;
 import footballcareer.database.Database;
 import footballcareer.database.DatabaseInitializer;
+
 import footballcareer.model.Career;
 import footballcareer.model.Season;
 import footballcareer.model.Team;
@@ -22,7 +23,7 @@ public class CareerRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.initialize();
+        DatabaseInitializer.resetForTests();
         careerRepository = new CareerRepository();
     }
 
@@ -115,7 +116,8 @@ public class CareerRepositoryTest {
 
         assertTrue(career.getId() > 0);
 
-        Career loadedCareer = careerRepository.findById(career.getId());
+        Career loadedCareer =
+                careerRepository.findById(career.getId());
 
         assertNotNull(loadedCareer);
         assertEquals(career.getId(), loadedCareer.getId());

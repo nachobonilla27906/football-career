@@ -37,7 +37,10 @@ public class PlayerRepository {
                 """;
 
         try (Connection connection = Database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(
+                     sql,
+                     java.sql.Statement.RETURN_GENERATED_KEYS
+             )) {
 
             statement.setString(1, player.getFirstName());
             statement.setString(2, player.getLastName());
@@ -58,8 +61,18 @@ public class PlayerRepository {
 
             statement.executeUpdate();
 
+            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
+
+                if (generatedKeys.next()) {
+                    player.setId(generatedKeys.getLong(1));
+                }
+            }
+
         } catch (SQLException e) {
-            throw new RuntimeException("Could not save player.", e);
+            throw new RuntimeException(
+                    "Could not save player.",
+                    e
+            );
         }
     }
 
@@ -86,7 +99,46 @@ public class PlayerRepository {
             }
 
         } catch (SQLException e) {
-            throw new RuntimeException("Could not find player.", e);
+            throw new RuntimeException(
+                    "Could not find player.",
+                    e
+            );
+        }
+    }
+
+    public Player findByName(
+            String firstName,
+            String lastName
+    ) {
+
+        String sql = """
+                SELECT *
+                FROM players
+                WHERE first_name = ?
+                  AND last_name = ?
+                LIMIT 1
+                """;
+
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, firstName);
+            statement.setString(2, lastName);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+
+                if (!resultSet.next()) {
+                    return null;
+                }
+
+                return mapPlayer(resultSet);
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException(
+                    "Could not find player by name.",
+                    e
+            );
         }
     }
 
@@ -96,9 +148,13 @@ public class PlayerRepository {
                 resultSet.getLong("id"),
                 resultSet.getString("first_name"),
                 resultSet.getString("last_name"),
-                LocalDate.parse(resultSet.getString("birth_date")),
+                LocalDate.parse(
+                        resultSet.getString("birth_date")
+                ),
                 resultSet.getString("nationality"),
-                Position.valueOf(resultSet.getString("position")),
+                Position.valueOf(
+                        resultSet.getString("position")
+                ),
                 PreferredFoot.valueOf(
                         resultSet.getString("preferred_foot")
                 ),
