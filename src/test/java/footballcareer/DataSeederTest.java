@@ -94,6 +94,17 @@ public class DataSeederTest {
                     competitions.getInt(1)
             );
 
+            ResultSet linkedCompetitions = statement.executeQuery(
+                    "SELECT COUNT(*) FROM competitions WHERE league_id IS NOT NULL"
+            );
+
+            linkedCompetitions.next();
+
+            assertEquals(
+                    5,
+                    linkedCompetitions.getInt(1)
+            );
+
             ResultSet competitionTeams = statement.executeQuery(
                     "SELECT COUNT(*) FROM competition_teams"
             );

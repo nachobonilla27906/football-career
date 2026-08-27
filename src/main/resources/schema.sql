@@ -114,7 +114,8 @@ CREATE TABLE IF NOT EXISTS matches (
 
     CHECK (home_team_id <> away_team_id),
     CHECK (home_goals >= 0),
-    CHECK (away_goals >= 0)
+    CHECK (away_goals >= 0),
+    UNIQUE (competition_id, home_team_id, away_team_id)
 );
 
 CREATE TABLE IF NOT EXISTS player_season_stats (

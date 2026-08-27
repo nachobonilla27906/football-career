@@ -10,6 +10,7 @@ public class Competition {
     private int tier;
 
     private Season season;
+    private League league;
 
     public Competition() {
     }
@@ -26,6 +27,18 @@ public class Competition {
         this.country = country;
         this.tier = tier;
         this.season = season;
+    }
+
+    public Competition(
+            long id,
+            String name,
+            String country,
+            int tier,
+            Season season,
+            League league
+    ) {
+        this(id, name, country, tier, season);
+        this.league = league;
     }
 
     public long getId() {
@@ -66,5 +79,13 @@ public class Competition {
 
     public void setSeason(Season season) {
         this.season = season;
+    }
+
+    public League getLeague() {
+        return league;
+    }
+
+    public void setLeague(League league) {
+        this.league = league;
     }
 }

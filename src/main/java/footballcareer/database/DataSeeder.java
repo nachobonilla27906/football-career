@@ -35,7 +35,8 @@ public class DataSeeder {
         Map<String, Season> seasons =
                 seedSeasons(seasonRepository);
 
-        seedLeagues(leagueRepository);
+        Map<String, League> leagues =
+                seedLeagues(leagueRepository);
 
         Map<String, Team> teams =
                 seedTeams(teamRepository);
@@ -43,7 +44,8 @@ public class DataSeeder {
         Map<String, Competition> competitions =
                 seedCompetitions(
                         competitionRepository,
-                        seasons
+                        seasons,
+                        leagues
                 );
 
         seedCompetitionTeams(
@@ -62,7 +64,8 @@ public class DataSeeder {
 
     private static Map<String, Competition> seedCompetitions(
             CompetitionRepository repository,
-            Map<String, Season> seasons
+            Map<String, Season> seasons,
+            Map<String, League> leagues
     ) {
 
         Map<String, Competition> competitions = new HashMap<>();
@@ -82,10 +85,17 @@ public class DataSeeder {
                 String name = data[0];
                 String seasonKey = data[3];
                 Season season = seasons.get(seasonKey);
+                League league = leagues.get(data[4]);
 
                 if (season == null) {
                     throw new RuntimeException(
                             "Season not found: " + seasonKey
+                    );
+                }
+
+                if (league == null) {
+                    throw new RuntimeException(
+                            "League not found: " + data[4]
                     );
                 }
 
@@ -101,7 +111,8 @@ public class DataSeeder {
                             name,
                             data[1],
                             Integer.parseInt(data[2]),
-                            season
+                            season,
+                            league
                     );
 
                     repository.save(competition);

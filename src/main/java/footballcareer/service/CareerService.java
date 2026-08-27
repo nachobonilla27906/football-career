@@ -15,15 +15,26 @@ public class CareerService {
     private final CareerRepository careerRepository;
     private final TeamRepository teamRepository;
     private final SeasonRepository seasonRepository;
+    private final MatchDayService matchDayService;
 
     public CareerService(
             CareerRepository careerRepository,
             TeamRepository teamRepository,
             SeasonRepository seasonRepository
     ) {
+        this(careerRepository, teamRepository, seasonRepository, null);
+    }
+
+    public CareerService(
+            CareerRepository careerRepository,
+            TeamRepository teamRepository,
+            SeasonRepository seasonRepository,
+            MatchDayService matchDayService
+    ) {
         this.careerRepository = careerRepository;
         this.teamRepository = teamRepository;
         this.seasonRepository = seasonRepository;
+        this.matchDayService = matchDayService;
     }
 
     public Career createCareer(
@@ -101,6 +112,10 @@ public class CareerService {
 
         career.setCurrentDate(nextDate);
         careerRepository.updateCurrentDate(career);
+
+        if (matchDayService != null) {
+            matchDayService.processMatchesOn(nextDate);
+        }
     }
 
     public List<Team> getAvailableTeams() {

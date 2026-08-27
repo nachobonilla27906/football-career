@@ -12,7 +12,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -98,5 +100,38 @@ class CompetitionTeamRepositoryTest {
                 competition.getId(),
                 team.getId()
         ));
+    }
+
+    @Test
+    void shouldFindTeamsByCompetition() {
+        repository.addTeamToCompetition(
+                competition.getId(),
+                team.getId()
+        );
+
+        List<Team> teams = repository.findTeamsByCompetition(
+                competition.getId()
+        );
+
+        assertEquals(1, teams.size());
+        assertEquals("Real Madrid", teams.getFirst().getName());
+    }
+
+    @Test
+    void shouldFindCompetitionsByTeam() {
+        repository.addTeamToCompetition(
+                competition.getId(),
+                team.getId()
+        );
+
+        List<Competition> competitions =
+                repository.findCompetitionsByTeam(team.getId());
+
+        assertEquals(1, competitions.size());
+        assertEquals("LaLiga", competitions.getFirst().getName());
+        assertEquals(
+                competition.getSeason().getId(),
+                competitions.getFirst().getSeason().getId()
+        );
     }
 }
