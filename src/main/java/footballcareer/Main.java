@@ -30,7 +30,15 @@ public class Main extends Application {
         MatchDayService matchDayService = new MatchDayService(
                 matchRepository,
                 new LeagueStandingRepository(),
-                new MatchSimulationService()
+                new MatchSimulationService(),
+                new PlayerMatchService(
+                        new LineupService(
+                                new PlayerRepository(),
+                                new PlayerStateRepository()
+                        ),
+                        new PlayerSeasonStatsRepository(),
+                        new PlayerStateRepository()
+                )
         );
         careerService = new CareerService(
                 new CareerRepository(), new TeamRepository(),
@@ -117,11 +125,40 @@ public class Main extends Application {
             refresh.run();
         });
 
-        VBox root = new VBox(12, title, manager, seasonLabel, date, advance,
+        Button squad = new Button("Ver plantilla");
+        squad.setOnAction(event -> showSquad(stage));
+
+        VBox root = new VBox(12, title, manager, seasonLabel, date, advance, squad,
                 new Label("Resultados del día"), results);
         root.setPadding(new Insets(30));
         stage.setScene(new Scene(root, 900, 600));
         refresh.run();
+    }
+
+    private void showSquad(Stage stage) {
+        Label title = new Label("Plantilla - " + career.getControlledTeam().getName());
+        title.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
+        ListView<String> players = new ListView<>();
+        PlayerRepository playerRepository = new PlayerRepository();
+        PlayerStateRepository stateRepository = new PlayerStateRepository();
+
+        playerRepository.findCurrentPlayersByTeam(career.getControlledTeam().getId())
+                .forEach(player -> {
+                    var state = stateRepository.findByPlayer(player.getId());
+                    players.getItems().add(
+                            player.getPosition() + " | " + player.getFullName()
+                                    + " | " + player.getOverall()
+                                    + " | Edad " + player.getAge(career.getCurrentDate())
+                                    + " | Forma " + state.getForm()
+                                    + " | Física " + state.getFitness()
+                    );
+                });
+
+        Button back = new Button("Volver");
+        back.setOnAction(event -> showDashboard(stage));
+        VBox root = new VBox(12, title, players, back);
+        root.setPadding(new Insets(30));
+        stage.setScene(new Scene(root, 900, 600));
     }
 
     public static void main(String[] args) {

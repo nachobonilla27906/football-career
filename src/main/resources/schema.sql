@@ -118,6 +118,54 @@ CREATE TABLE IF NOT EXISTS matches (
     UNIQUE (competition_id, home_team_id, away_team_id)
 );
 
+CREATE TABLE IF NOT EXISTS contracts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER NOT NULL,
+    team_id INTEGER NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    salary REAL NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (player_id) REFERENCES players(id),
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    CHECK (salary >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_contract_per_player
+ON contracts(player_id) WHERE active = 1;
+
+CREATE TABLE IF NOT EXISTS player_state (
+    player_id INTEGER PRIMARY KEY,
+    form INTEGER NOT NULL DEFAULT 50,
+    morale INTEGER NOT NULL DEFAULT 50,
+    fitness INTEGER NOT NULL DEFAULT 100,
+    FOREIGN KEY (player_id) REFERENCES players(id),
+    CHECK (form BETWEEN 0 AND 100),
+    CHECK (morale BETWEEN 0 AND 100),
+    CHECK (fitness BETWEEN 0 AND 100)
+);
+
+CREATE TABLE IF NOT EXISTS club_finances (
+    team_id INTEGER PRIMARY KEY,
+    transfer_budget REAL NOT NULL,
+    wage_budget REAL NOT NULL,
+    current_wage_spend REAL NOT NULL DEFAULT 0,
+    balance REAL NOT NULL,
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    CHECK (transfer_budget >= 0),
+    CHECK (wage_budget >= 0),
+    CHECK (current_wage_spend >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS player_market_status (
+    player_id INTEGER PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'NOT_LISTED',
+    asking_price REAL,
+    FOREIGN KEY (player_id) REFERENCES players(id),
+    CHECK (status IN ('NOT_LISTED', 'TRANSFER_LISTED')),
+    CHECK (asking_price IS NULL OR asking_price > 0)
+);
+
 CREATE TABLE IF NOT EXISTS player_season_stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 

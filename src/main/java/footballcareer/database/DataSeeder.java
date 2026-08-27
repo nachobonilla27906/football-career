@@ -31,6 +31,7 @@ public class DataSeeder {
                 new CompetitionRepository();
         CompetitionTeamRepository competitionTeamRepository =
                 new CompetitionTeamRepository();
+        ContractRepository contractRepository = new ContractRepository();
 
         Map<String, Season> seasons =
                 seedSeasons(seasonRepository);
@@ -58,8 +59,36 @@ public class DataSeeder {
                 playerRepository,
                 playerTeamRepository,
                 seasons,
-                teams
+                teams,
+                "data/players.csv"
         );
+
+        seedPlayers(
+                playerRepository,
+                playerTeamRepository,
+                seasons,
+                teams,
+                "data/players_premier_league.csv"
+        );
+
+        seedPlayers(
+                playerRepository,
+                playerTeamRepository,
+                seasons,
+                teams,
+                "data/players_top5_2025_26.csv"
+        );
+
+        Season contractSeason = seasons.values().stream()
+                .findFirst().orElseThrow();
+        contractRepository.initializeMissingContracts(
+                contractSeason.getStartDate(),
+                LocalDate.of(2030, 6, 30)
+        );
+
+        new PlayerStateRepository().initializeMissingStates();
+        new ClubFinanceRepository().initializeMissingFinances();
+        new PlayerMarketRepository().initializeMissingStatuses();
     }
 
     private static Map<String, Competition> seedCompetitions(
@@ -387,7 +416,8 @@ public class DataSeeder {
             PlayerRepository playerRepository,
             PlayerTeamRepository playerTeamRepository,
             Map<String, Season> seasons,
-            Map<String, Team> teams
+            Map<String, Team> teams,
+            String resourcePath
     ) {
 
         Season season = seasons.values()
@@ -400,7 +430,7 @@ public class DataSeeder {
                 );
 
         try (BufferedReader reader =
-                     openFile("data/players.csv")) {
+                     openFile(resourcePath)) {
 
             String line = reader.readLine();
 
@@ -414,11 +444,13 @@ public class DataSeeder {
 
                 String firstName = data[0];
                 String lastName = data[1];
+                LocalDate birthDate = LocalDate.parse(data[2]);
 
                 Player player =
-                        playerRepository.findByName(
+                        playerRepository.findByIdentity(
                                 firstName,
-                                lastName
+                                lastName,
+                                birthDate
                         );
 
                 if (player == null) {
@@ -427,7 +459,7 @@ public class DataSeeder {
                             0,
                             firstName,
                             lastName,
-                            LocalDate.parse(data[2]),
+                            birthDate,
                             data[3],
                             Position.valueOf(data[4]),
                             PreferredFoot.valueOf(data[5]),
@@ -471,6 +503,7 @@ public class DataSeeder {
                             season.getStartDate()
                     );
                 }
+
             }
 
         } catch (IOException e) {

@@ -67,10 +67,7 @@ public class DataSeederTest {
 
             players.next();
 
-            assertEquals(
-                    6,
-                    players.getInt(1)
-            );
+            assertEquals(453, players.getInt(1));
 
             ResultSet playerTeams = statement.executeQuery(
                     "SELECT COUNT(*) FROM player_team"
@@ -78,10 +75,23 @@ public class DataSeederTest {
 
             playerTeams.next();
 
-            assertEquals(
-                    6,
-                    playerTeams.getInt(1)
-            );
+            assertEquals(453, playerTeams.getInt(1));
+
+            assertEquals(28, countCurrentPlayers(statement, "ARS"));
+            assertEquals(32, countCurrentPlayers(statement, "LIV"));
+            assertEquals(30, countCurrentPlayers(statement, "MCI"));
+            assertEquals(32, countCurrentPlayers(statement, "MUN"));
+            assertEquals(36, countCurrentPlayers(statement, "RMA"));
+            assertEquals(28, countCurrentPlayers(statement, "BAR"));
+            assertEquals(36, countCurrentPlayers(statement, "ATM"));
+            assertEquals(27, countCurrentPlayers(statement, "VCF"));
+            assertEquals(28, countCurrentPlayers(statement, "INT"));
+            assertEquals(26, countCurrentPlayers(statement, "JUV"));
+            assertEquals(26, countCurrentPlayers(statement, "MIL"));
+            assertEquals(32, countCurrentPlayers(statement, "BAY"));
+            assertEquals(27, countCurrentPlayers(statement, "BVB"));
+            assertEquals(28, countCurrentPlayers(statement, "PSG"));
+            assertEquals(37, countCurrentPlayers(statement, "OM"));
 
             ResultSet competitions = statement.executeQuery(
                     "SELECT COUNT(*) FROM competitions"
@@ -166,10 +176,7 @@ public class DataSeederTest {
 
             players.next();
 
-            assertEquals(
-                    6,
-                    players.getInt(1)
-            );
+            assertEquals(453, players.getInt(1));
 
             ResultSet playerTeams = statement.executeQuery(
                     "SELECT COUNT(*) FROM player_team"
@@ -177,10 +184,7 @@ public class DataSeederTest {
 
             playerTeams.next();
 
-            assertEquals(
-                    6,
-                    playerTeams.getInt(1)
-            );
+            assertEquals(453, playerTeams.getInt(1));
 
             ResultSet competitions = statement.executeQuery(
                     "SELECT COUNT(*) FROM competitions"
@@ -204,5 +208,20 @@ public class DataSeederTest {
                     competitionTeams.getInt(1)
             );
         }
+    }
+
+    private int countCurrentPlayers(
+            Statement statement,
+            String teamShortName
+    ) throws Exception {
+        ResultSet resultSet = statement.executeQuery("""
+                SELECT COUNT(*)
+                FROM player_team pt
+                JOIN teams t ON pt.team_id = t.id
+                WHERE t.short_name = '%s'
+                  AND pt.end_date IS NULL
+                """.formatted(teamShortName));
+        resultSet.next();
+        return resultSet.getInt(1);
     }
 }

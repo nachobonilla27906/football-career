@@ -4,6 +4,7 @@ import footballcareer.database.CompetitionRepository;
 import footballcareer.database.CompetitionTeamRepository;
 import footballcareer.database.LeagueStandingRepository;
 import footballcareer.database.MatchRepository;
+import footballcareer.database.PlayerSeasonStatsRepository;
 import footballcareer.model.Competition;
 
 public class FootballWorldService {
@@ -25,6 +26,7 @@ public class FootballWorldService {
     }
 
     public void prepareSeason(long seasonId) {
+        new PlayerSeasonStatsRepository().initializeForSeason(seasonId);
         for (Competition competition :
                 competitionRepository.findBySeason(seasonId)) {
             var teams = competitionTeamRepository
