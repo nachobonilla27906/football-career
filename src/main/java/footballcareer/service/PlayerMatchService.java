@@ -46,7 +46,8 @@ public class PlayerMatchService {
         List<MatchEvent> teamEvents = eventRepository.findByMatch(match.getId())
                 .stream().filter(event -> event.getTeam().getId() == teamId).toList();
 
-        for (Player player : lineupService.selectStartingEleven(teamId)) {
+        for (Player player : lineupService.selectMatchLineup(
+                match.getId(), teamId).getStarters()) {
             int goals = countPrimary(teamEvents, player.getId(), MatchEventType.GOAL);
             int assists = (int) teamEvents.stream()
                     .filter(event -> event.getType() == MatchEventType.GOAL)

@@ -68,6 +68,7 @@ public class ClubTransferAiService {
         List<Team> aiTeams = teamRepository.findAll().stream()
                 .filter(team -> team.getId() != controlledTeamId).toList();
         aiTeams.forEach(this::listSurplusPlayer);
+        createIncomingOffers(date, controlledTeamId, aiTeams);
 
         List<Team> buyers = new ArrayList<>(aiTeams);
         java.util.Collections.shuffle(buyers, random);
@@ -89,6 +90,60 @@ public class ClubTransferAiService {
             }
         }
         return completed;
+    }
+
+    private void createIncomingOffers(LocalDate date, long controlledTeamId,
+            List<Team> aiTeams) {
+        marketRepository.findTransferListed(-1).stream()
+                .filter(player -> {
+                    Long seller = playerTeamRepository.findCurrentTeamId(player.getId());
+                    return seller != null && seller == controlledTeamId;
+                })
+                .filter(player -> !new footballcareer.database.TransferOfferRepository()
+                        .hasPendingOfferForPlayer(player.getId()))
+                .forEach(player -> {
+                    Double asking = marketRepository.findAskingPrice(player.getId());
+                    if (asking == null) return;
+                    List<Team> possibleBuyers = aiTeams.stream().filter(team -> {
+                        ClubFinance finance = financeRepository.findByTeam(team.getId());
+                        return finance != null && finance.getTransferBudget() >= asking * 0.82
+                                && finance.getAvailableWageBudget() >= player.getSalary();
+                    }).toList();
+                    if (possibleBuyers.isEmpty()) return;
+                    Team buyer = possibleBuyers.get(random.nextInt(possibleBuyers.size()));
+                    double amount = asking * (0.82 + random.nextDouble() * 0.20);
+                    try {
+                        offerService.makeOffer(player.getId(), buyer.getId(), amount, date);
+                    } catch (IllegalArgumentException | IllegalStateException ignored) {
+                        // The player or budget changed during this market cycle.
+                    }
+                });
+    }
+
+    public void ensureMarketSupply(long controlledTeamId) {
+        teamRepository.findAll().stream()
+                .filter(team -> team.getId() != controlledTeamId)
+                .forEach(this::listMarketSample);
+    }
+
+    private void listMarketSample(Team team) {
+        List<Player> squad = playerRepository.findCurrentPlayersByTeam(team.getId());
+        for (int group = 0; group < 4; group++) {
+            int selectedGroup = group;
+            squad.stream().filter(player -> positionGroup(player) == selectedGroup)
+                    .min(Comparator.comparingInt(Player::getOverall))
+                    .ifPresent(player -> marketRepository.listForTransfer(
+                            player.getId(), Math.max(100_000, player.getMarketValue())));
+        }
+    }
+
+    private int positionGroup(Player player) {
+        return switch (player.getPosition()) {
+            case GK -> 0;
+            case CB, LB, RB -> 1;
+            case CDM, CM, CAM -> 2;
+            case LW, RW, ST -> 3;
+        };
     }
 
     private void listSurplusPlayer(Team team) {

@@ -21,6 +21,7 @@ public class MatchDayService {
     private final PlayerMatchService playerMatchService;
     private final MatchEventGenerationService eventGenerationService;
     private final MatchStatisticsService statisticsService;
+    private final LightweightMatchSimulationService lightweightSimulationService;
 
     public MatchDayService(
             MatchRepository matchRepository,
@@ -64,6 +65,7 @@ public class MatchDayService {
         this.playerMatchService = playerMatchService;
         this.eventGenerationService = eventGenerationService;
         this.statisticsService = statisticsService;
+        this.lightweightSimulationService = new LightweightMatchSimulationService();
     }
 
     public List<Match> processMatchesOn(LocalDate date) {
@@ -86,6 +88,38 @@ public class MatchDayService {
         }
 
         return processed;
+    }
+
+    public List<Match> processBackgroundMatchesOn(LocalDate date, long controlledTeamId) {
+        List<Match> processed = new ArrayList<>();
+        for (Match match : matchRepository.findByDate(date)) {
+            if (match.isPlayed() || involves(match, controlledTeamId)) continue;
+            lightweightSimulationService.simulate(match);
+            standingRepository.applyResult(match);
+            matchRepository.updateResult(match);
+            processed.add(match);
+        }
+        return processed;
+    }
+
+    public List<Match> processControlledMatchesOn(LocalDate date, long controlledTeamId) {
+        List<Match> processed = new ArrayList<>();
+        for (Match match : matchRepository.findByDate(date)) {
+            if (match.isPlayed() || !involves(match, controlledTeamId)) continue;
+            simulationService.simulate(match);
+            standingRepository.applyResult(match);
+            matchRepository.updateResult(match);
+            eventGenerationService.generate(match);
+            statisticsService.generate(match);
+            if (playerMatchService != null) playerMatchService.process(match);
+            processed.add(match);
+        }
+        return processed;
+    }
+
+    private boolean involves(Match match, long teamId) {
+        return match.getHomeTeam().getId() == teamId
+                || match.getAwayTeam().getId() == teamId;
     }
 
     private static MatchEventGenerationService defaultEventGenerationService() {

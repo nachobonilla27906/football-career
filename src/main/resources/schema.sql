@@ -118,6 +118,20 @@ CREATE TABLE IF NOT EXISTS matches (
     UNIQUE (competition_id, home_team_id, away_team_id)
 );
 
+CREATE TABLE IF NOT EXISTS career_match_states (
+    career_id INTEGER NOT NULL,
+    match_id INTEGER NOT NULL,
+    home_goals INTEGER NOT NULL DEFAULT 0,
+    away_goals INTEGER NOT NULL DEFAULT 0,
+    played INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (career_id, match_id),
+    FOREIGN KEY (career_id) REFERENCES careers(id),
+    FOREIGN KEY (match_id) REFERENCES matches(id),
+    CHECK (home_goals >= 0),
+    CHECK (away_goals >= 0),
+    CHECK (played IN (0, 1))
+);
+
 CREATE TABLE IF NOT EXISTS match_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     match_id INTEGER NOT NULL,
@@ -154,6 +168,52 @@ CREATE TABLE IF NOT EXISTS match_team_stats (
     CHECK (fouls >= 0),
     CHECK (yellow_cards >= 0),
     CHECK (red_cards >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS match_lineups (
+    match_id INTEGER NOT NULL,
+    team_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    position_order INTEGER NOT NULL,
+    PRIMARY KEY (match_id, team_id, player_id),
+    FOREIGN KEY (match_id) REFERENCES matches(id),
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    FOREIGN KEY (player_id) REFERENCES players(id),
+    CHECK (role IN ('STARTER', 'SUBSTITUTE')),
+    CHECK (position_order >= 0),
+    UNIQUE (match_id, team_id, role, position_order)
+);
+
+CREATE TABLE IF NOT EXISTS match_tactics (
+    match_id INTEGER NOT NULL,
+    team_id INTEGER NOT NULL,
+    formation TEXT NOT NULL DEFAULT '4-3-3',
+    PRIMARY KEY (match_id, team_id),
+    FOREIGN KEY (match_id) REFERENCES matches(id),
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    CHECK (formation IN ('4-3-3', '4-2-3-1', '4-4-2'))
+);
+
+CREATE TABLE IF NOT EXISTS career_shortlist (
+    career_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    added_date TEXT NOT NULL,
+    PRIMARY KEY (career_id, player_id),
+    FOREIGN KEY (career_id) REFERENCES careers(id),
+    FOREIGN KEY (player_id) REFERENCES players(id)
+);
+
+CREATE TABLE IF NOT EXISTS training_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    career_id INTEGER NOT NULL,
+    team_id INTEGER NOT NULL,
+    session_date TEXT NOT NULL,
+    training_type TEXT NOT NULL,
+    UNIQUE (career_id, session_date),
+    FOREIGN KEY (career_id) REFERENCES careers(id),
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    CHECK (training_type IN ('RECOVERY', 'BALANCED', 'INTENSIVE'))
 );
 
 CREATE TABLE IF NOT EXISTS contracts (
@@ -212,11 +272,13 @@ CREATE TABLE IF NOT EXISTS transfer_offers (
     amount REAL NOT NULL,
     offer_date TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING',
+    counter_amount REAL,
     FOREIGN KEY (player_id) REFERENCES players(id),
     FOREIGN KEY (buying_team_id) REFERENCES teams(id),
     FOREIGN KEY (selling_team_id) REFERENCES teams(id),
     CHECK (buying_team_id <> selling_team_id),
     CHECK (amount > 0),
+    CHECK (counter_amount IS NULL OR counter_amount > 0),
     CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'COMPLETED'))
 );
 

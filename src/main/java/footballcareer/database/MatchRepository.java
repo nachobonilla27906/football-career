@@ -96,20 +96,36 @@ public class MatchRepository {
             );
         }
 
-        String sql = """
+        Long careerId = CareerContext.getCareerId();
+        String sql = careerId == null ? """
                 UPDATE matches
                 SET home_goals = ?,
                     away_goals = ?,
                     played = 1
                 WHERE id = ?
+                """ : """
+                INSERT INTO career_match_states
+                    (career_id, match_id, home_goals, away_goals, played)
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(career_id, match_id) DO UPDATE SET
+                    home_goals = excluded.home_goals,
+                    away_goals = excluded.away_goals,
+                    played = 1
                 """;
 
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
 
-            statement.setInt(1, match.getHomeGoals());
-            statement.setInt(2, match.getAwayGoals());
-            statement.setLong(3, match.getId());
+            if (careerId == null) {
+                statement.setInt(1, match.getHomeGoals());
+                statement.setInt(2, match.getAwayGoals());
+                statement.setLong(3, match.getId());
+            } else {
+                statement.setLong(1, careerId);
+                statement.setLong(2, match.getId());
+                statement.setInt(3, match.getHomeGoals());
+                statement.setInt(4, match.getAwayGoals());
+            }
 
             if (statement.executeUpdate() == 0) {
                 throw new IllegalArgumentException("Match does not exist.");
@@ -150,13 +166,20 @@ public class MatchRepository {
     }
 
     private String baseSelect() {
+        Long careerId = CareerContext.getCareerId();
+        String stateColumns = careerId == null
+                ? "m.home_goals, m.away_goals, m.played,"
+                : "COALESCE(cms.home_goals, 0) AS home_goals, "
+                + "COALESCE(cms.away_goals, 0) AS away_goals, "
+                + "COALESCE(cms.played, 0) AS played,";
+        String stateJoin = careerId == null ? "" :
+                " LEFT JOIN career_match_states cms ON cms.match_id = m.id AND cms.career_id = "
+                        + careerId;
         return """
                 SELECT
                     m.id,
                     m.date,
-                    m.home_goals,
-                    m.away_goals,
-                    m.played,
+                """ + stateColumns + """
                     c.id AS competition_id,
                     c.name AS competition_name,
                     c.country AS competition_country,
@@ -186,7 +209,7 @@ public class MatchRepository {
                 JOIN seasons s ON c.season_id = s.id
                 JOIN teams h ON m.home_team_id = h.id
                 JOIN teams a ON m.away_team_id = a.id
-                """;
+                """ + stateJoin;
     }
 
     private Match mapMatch(ResultSet resultSet) throws SQLException {

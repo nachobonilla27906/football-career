@@ -46,4 +46,19 @@ class TransferOfferServiceTest {
                         new TeamRepository().findByShortName("ARS").getId(),
                         1_000_000, LocalDate.of(2026, 8, 20)));
     }
+
+    @Test
+    void shouldCreateAndAcceptCounterOfferForCloseBid() {
+        new PlayerMarketRepository().listForTransfer(player.getId(), 10_000_000);
+        TransferOffer offer = service.makeOffer(player.getId(), valencia.getId(),
+                8_500_000, LocalDate.of(2026, 8, 20));
+
+        TransferOffer countered = service.evaluate(offer.getId());
+
+        assertEquals(TransferOfferStatus.PENDING, countered.getStatus());
+        assertNotNull(countered.getCounterAmount());
+        assertTrue(countered.getCounterAmount() > offer.getAmount());
+        assertEquals(TransferOfferStatus.ACCEPTED,
+                service.acceptCounterOffer(offer.getId()).getStatus());
+    }
 }

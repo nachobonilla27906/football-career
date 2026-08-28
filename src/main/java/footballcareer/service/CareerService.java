@@ -79,6 +79,8 @@ public class CareerService {
         );
 
         careerRepository.save(career);
+        new footballcareer.database.CareerMatchStateRepository().initialize(career, true);
+        footballcareer.database.CareerContext.activate(career.getId());
 
         return career;
     }
@@ -93,10 +95,21 @@ public class CareerService {
             );
         }
 
+        new footballcareer.database.CareerMatchStateRepository().initialize(career, false);
+        footballcareer.database.CareerContext.activate(career.getId());
+
         return career;
     }
 
     public void advanceDay(Career career) {
+        advanceDate(career, false);
+    }
+
+    public void advanceDayForPlayer(Career career) {
+        advanceDate(career, true);
+    }
+
+    private void advanceDate(Career career, boolean awaitControlledMatch) {
 
         if (career.getId() <= 0) {
             throw new IllegalArgumentException(
@@ -117,9 +130,15 @@ public class CareerService {
         career.setCurrentDate(nextDate);
         careerRepository.updateCurrentDate(career);
 
-        worldSimulationService.processDate(nextDate,
-                career.getCurrentSeason().getId(),
-                career.getControlledTeam().getId());
+        if (awaitControlledMatch) {
+            worldSimulationService.processDate(nextDate,
+                    career.getCurrentSeason().getId(),
+                    career.getControlledTeam().getId());
+        } else {
+            worldSimulationService.processDateFully(nextDate,
+                    career.getCurrentSeason().getId(),
+                    career.getControlledTeam().getId());
+        }
     }
 
     public void advanceDays(Career career, int days) {
@@ -129,6 +148,18 @@ public class CareerService {
         for (int day = 0; day < days; day++) {
             advanceDay(career);
         }
+    }
+
+    public void advanceDaysForPlayer(Career career, int days) {
+        if (days <= 0) {
+            throw new IllegalArgumentException("Days to advance must be positive.");
+        }
+        for (int day = 0; day < days; day++) advanceDayForPlayer(career);
+    }
+
+    public List<footballcareer.model.Match> simulateControlledMatchesToday(Career career) {
+        return worldSimulationService.simulateControlledMatches(
+                career.getCurrentDate(), career.getControlledTeam().getId());
     }
 
     public List<Team> getAvailableTeams() {

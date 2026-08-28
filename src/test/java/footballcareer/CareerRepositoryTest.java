@@ -128,5 +128,11 @@ public class CareerRepositoryTest {
                 LocalDate.of(2026, 8, 15),
                 loadedCareer.getCurrentDate()
         );
+        assertEquals(1, careerRepository.findAll().size());
+        assertEquals(career.getId(), careerRepository.findAll().getFirst().getId());
+        careerRepository.rename(career.getId(), "Renamed Manager");
+        assertEquals("Renamed Manager", careerRepository.findById(career.getId()).getManagerName());
+        careerRepository.delete(career.getId());
+        assertNull(careerRepository.findById(career.getId()));
     }
 }

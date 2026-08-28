@@ -11,6 +11,7 @@ public class TransferOffer {
     private double amount;
     private LocalDate offerDate;
     private TransferOfferStatus status;
+    private Double counterAmount;
 
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
@@ -26,4 +27,6 @@ public class TransferOffer {
     public void setOfferDate(LocalDate offerDate) { this.offerDate = offerDate; }
     public TransferOfferStatus getStatus() { return status; }
     public void setStatus(TransferOfferStatus status) { this.status = status; }
+    public Double getCounterAmount() { return counterAmount; }
+    public void setCounterAmount(Double counterAmount) { this.counterAmount = counterAmount; }
 }

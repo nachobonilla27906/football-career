@@ -59,6 +59,27 @@ class PlayerStatsAndLineupTest {
     }
 
     @Test
+    void shouldPersistSelectedLineupForAMatch() {
+        new footballcareer.service.FootballWorldService().prepareSeason(season.getId());
+        Competition competition = new CompetitionRepository()
+                .findByNameAndSeason("Premier League", season.getId());
+        Match match = new MatchRepository().findByCompetition(competition.getId()).getFirst();
+        MatchLineupRepository repository = new MatchLineupRepository();
+        LineupService lineups = new LineupService(new PlayerRepository(),
+                new PlayerStateRepository(), repository);
+        MatchLineup selected = lineups.selectMatchLineup(arsenal.getId());
+
+        repository.save(match.getId(), arsenal.getId(),
+                selected.getStarters(), selected.getSubstitutes());
+        MatchLineup loaded = lineups.selectMatchLineup(match.getId(), arsenal.getId());
+
+        assertEquals(11, loaded.getStarters().size());
+        assertEquals(selected.getStarters().stream().map(Player::getId).toList(),
+                loaded.getStarters().stream().map(Player::getId).toList());
+        assertEquals(7, loaded.getSubstitutes().size());
+    }
+
+    @Test
     void shouldRecordAndAverageAppearances() {
         Player player = new PlayerRepository()
                 .findCurrentPlayersByTeam(arsenal.getId()).getFirst();

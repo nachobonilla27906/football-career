@@ -2,6 +2,7 @@ package footballcareer.service;
 
 import footballcareer.database.PlayerRepository;
 import footballcareer.database.PlayerStateRepository;
+import footballcareer.database.MatchLineupRepository;
 import footballcareer.model.Player;
 import footballcareer.model.MatchLineup;
 import footballcareer.model.Team;
@@ -15,13 +16,21 @@ import java.util.Set;
 public class LineupService {
     private final PlayerRepository playerRepository;
     private final PlayerStateRepository stateRepository;
+    private final MatchLineupRepository matchLineupRepository;
 
     public LineupService(
             PlayerRepository playerRepository,
             PlayerStateRepository stateRepository
     ) {
+        this(playerRepository, stateRepository, new MatchLineupRepository());
+    }
+
+    public LineupService(PlayerRepository playerRepository,
+            PlayerStateRepository stateRepository,
+            MatchLineupRepository matchLineupRepository) {
         this.playerRepository = playerRepository;
         this.stateRepository = stateRepository;
+        this.matchLineupRepository = matchLineupRepository;
     }
 
     public List<Player> selectStartingEleven(long teamId) {
@@ -65,6 +74,11 @@ public class LineupService {
                 eligible.subList(0, Math.min(7, eligible.size())));
         Team team = new Team(); team.setId(teamId);
         return new MatchLineup(team, starters, substitutes);
+    }
+
+    public MatchLineup selectMatchLineup(long matchId, long teamId) {
+        MatchLineup saved = matchLineupRepository.find(matchId, teamId);
+        return saved != null ? saved : selectMatchLineup(teamId);
     }
 
     private void pickBest(List<Player> available, List<Player> selected,

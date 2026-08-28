@@ -41,6 +41,12 @@ public class DatabaseInitializer {
                 }
 
                 statement.execute("PRAGMA foreign_keys = ON");
+
+                try {
+                    statement.execute("ALTER TABLE transfer_offers ADD COLUMN counter_amount REAL");
+                } catch (SQLException ignored) {
+                    // Column already exists on new or previously migrated databases.
+                }
             }
 
             System.out.println("Database initialized successfully.");
@@ -55,7 +61,11 @@ public class DatabaseInitializer {
 
     public static void resetForTests() {
 
+        CareerContext.clear();
+
         String[] tables = {
+                "training_sessions",
+                "career_shortlist",
                 "careers",
                 "transfers",
                 "transfer_offers",
@@ -65,8 +75,11 @@ public class DatabaseInitializer {
                 "player_market_status",
                 "league_standings",
                 "player_season_stats",
+                "match_tactics",
+                "match_lineups",
                 "match_team_stats",
                 "match_events",
+                "career_match_states",
                 "matches",
                 "player_team",
                 "competition_teams",

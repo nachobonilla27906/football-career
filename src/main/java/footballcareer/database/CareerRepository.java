@@ -9,8 +9,26 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CareerRepository {
+
+    public List<Career> findAll() {
+        List<Career> careers = new ArrayList<>();
+        String sql = "SELECT id FROM careers ORDER BY id DESC";
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                Career career = findById(resultSet.getLong("id"));
+                if (career != null) careers.add(career);
+            }
+            return careers;
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not find careers.", e);
+        }
+    }
 
     public void save(Career career) {
 
@@ -176,6 +194,54 @@ public class CareerRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not update career season.", e);
+        }
+    }
+
+    public void rename(long careerId, String managerName) {
+        if (managerName == null || managerName.isBlank()) {
+            throw new IllegalArgumentException("Manager name is required.");
+        }
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE careers SET manager_name = ? WHERE id = ?")) {
+            statement.setString(1, managerName.trim());
+            statement.setLong(2, careerId);
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalArgumentException("Career does not exist.");
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not rename career.", exception);
+        }
+    }
+
+    public void delete(long careerId) {
+        try (Connection connection = Database.getConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement shortlist = connection.prepareStatement(
+                    "DELETE FROM career_shortlist WHERE career_id = ?");
+                 PreparedStatement matchStates = connection.prepareStatement(
+                         "DELETE FROM career_match_states WHERE career_id = ?");
+                 PreparedStatement training = connection.prepareStatement(
+                         "DELETE FROM training_sessions WHERE career_id = ?");
+                 PreparedStatement career = connection.prepareStatement(
+                         "DELETE FROM careers WHERE id = ?")) {
+                shortlist.setLong(1, careerId);
+                shortlist.executeUpdate();
+                matchStates.setLong(1, careerId);
+                matchStates.executeUpdate();
+                training.setLong(1, careerId);
+                training.executeUpdate();
+                career.setLong(1, careerId);
+                if (career.executeUpdate() != 1) {
+                    throw new IllegalArgumentException("Career does not exist.");
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                connection.rollback();
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not delete career.", exception);
         }
     }
 }

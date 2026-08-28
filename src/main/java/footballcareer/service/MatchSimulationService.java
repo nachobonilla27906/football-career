@@ -5,6 +5,7 @@ import footballcareer.model.MatchLineup;
 import footballcareer.model.Player;
 import footballcareer.database.PlayerRepository;
 import footballcareer.database.PlayerStateRepository;
+import footballcareer.database.MatchTacticsRepository;
 
 import java.util.Random;
 
@@ -13,6 +14,7 @@ public class MatchSimulationService {
     private final Random random;
     private final LineupService lineupService;
     private final PlayerStateRepository stateRepository;
+    private final MatchTacticsRepository tacticsRepository;
 
     public MatchSimulationService() {
         this(new Random(), defaultLineupService(), new PlayerStateRepository());
@@ -27,6 +29,7 @@ public class MatchSimulationService {
         this.random = random;
         this.lineupService = lineupService;
         this.stateRepository = stateRepository;
+        this.tacticsRepository = new MatchTacticsRepository();
     }
 
     public void simulate(Match match) {
@@ -34,12 +37,20 @@ public class MatchSimulationService {
             throw new IllegalArgumentException("Match has already been played.");
         }
 
-        MatchLineup home = lineupService.selectMatchLineup(match.getHomeTeam().getId());
-        MatchLineup away = lineupService.selectMatchLineup(match.getAwayTeam().getId());
-        double homeStrength = calculateStrength(home) + 4;
+        MatchLineup home = lineupService.selectMatchLineup(
+                match.getId(), match.getHomeTeam().getId());
+        MatchLineup away = lineupService.selectMatchLineup(
+                match.getId(), match.getAwayTeam().getId());
+        double homeStrength = calculateStrength(home);
         double awayStrength = calculateStrength(away);
-        int homeGoals = generateGoals(homeStrength, awayStrength);
-        int awayGoals = generateGoals(awayStrength, homeStrength);
+        TacticalProfile homeTactics = tacticalProfile(match.getId(), match.getHomeTeam().getId());
+        TacticalProfile awayTactics = tacticalProfile(match.getId(), match.getAwayTeam().getId());
+        double homeAttack = homeStrength + 4 + homeTactics.attackBonus();
+        double homeDefence = homeStrength + 4 + homeTactics.defenceBonus();
+        double awayAttack = awayStrength + awayTactics.attackBonus();
+        double awayDefence = awayStrength + awayTactics.defenceBonus();
+        int homeGoals = generateGoals(homeAttack, awayDefence);
+        int awayGoals = generateGoals(awayAttack, homeDefence);
 
         match.setResult(homeGoals, awayGoals);
     }
@@ -48,6 +59,16 @@ public class MatchSimulationService {
         return lineup.getStarters().stream().mapToDouble(this::playerStrength).average()
                 .orElseThrow(() -> new IllegalStateException("Lineup is empty."));
     }
+
+    TacticalProfile tacticalProfile(long matchId, long teamId) {
+        return switch (tacticsRepository.findFormation(matchId, teamId)) {
+            case "4-2-3-1" -> new TacticalProfile(-0.5, 2.0);
+            case "4-4-2" -> new TacticalProfile(0.5, 0.5);
+            default -> new TacticalProfile(2.0, -1.0);
+        };
+    }
+
+    record TacticalProfile(double attackBonus, double defenceBonus) {}
 
     private double playerStrength(Player player) {
         var state = stateRepository.findByPlayer(player.getId());

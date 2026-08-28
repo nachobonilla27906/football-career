@@ -86,4 +86,20 @@ class MatchDayServiceTest {
 
         assertTrue(service.processMatchesOn(scheduled.getDate()).isEmpty());
     }
+
+    @Test
+    void shouldLeaveControlledMatchPendingWhileProcessingBackgroundMatches() {
+        Match controlledMatch = matchRepository
+                .findByCompetition(competition.getId()).getFirst();
+        long controlledTeamId = controlledMatch.getHomeTeam().getId();
+        MatchDayService service = new MatchDayService(matchRepository,
+                standingRepository, new MatchSimulationService(new Random(44)));
+
+        service.processBackgroundMatchesOn(controlledMatch.getDate(), controlledTeamId);
+
+        assertFalse(matchRepository.findById(controlledMatch.getId()).isPlayed());
+        service.processControlledMatchesOn(controlledMatch.getDate(), controlledTeamId);
+        assertTrue(matchRepository.findById(controlledMatch.getId()).isPlayed());
+        assertNotNull(new MatchReportService().build(controlledMatch.getId()));
+    }
 }

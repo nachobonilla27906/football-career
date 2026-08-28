@@ -51,10 +51,39 @@ public class TransferOfferService {
         Player player = playerRepository.findById(offer.getPlayer().getId());
         Double askingPrice = marketRepository.findAskingPrice(player.getId());
         double required = askingPrice != null ? askingPrice : player.getMarketValue() * 1.10;
+        if (offer.getAmount() < required && offer.getAmount() >= required * 0.80) {
+            double counterAmount = Math.max(offer.getAmount() * 1.05, required * 0.95);
+            offerRepository.setCounterOffer(offerId, counterAmount);
+            offer.setCounterAmount(counterAmount);
+            return offer;
+        }
         TransferOfferStatus decision = offer.getAmount() >= required
                 ? TransferOfferStatus.ACCEPTED : TransferOfferStatus.REJECTED;
         offerRepository.updateStatus(offerId, decision);
         offer.setStatus(decision);
         return offer;
+    }
+
+    public TransferOffer acceptCounterOffer(long offerId) {
+        TransferOffer offer = offerRepository.findById(offerId);
+        if (offer == null || offer.getCounterAmount() == null) {
+            throw new IllegalStateException("There is no counteroffer to accept.");
+        }
+        if (financeRepository.findByTeam(offer.getBuyingTeam().getId())
+                .getTransferBudget() < offer.getCounterAmount()) {
+            throw new IllegalStateException("Insufficient transfer budget.");
+        }
+        offerRepository.acceptCounterOffer(offerId);
+        return offerRepository.findById(offerId);
+    }
+
+    public TransferOffer respondToIncomingOffer(long offerId, boolean accept) {
+        TransferOffer offer = offerRepository.findById(offerId);
+        if (offer == null || offer.getStatus() != TransferOfferStatus.PENDING) {
+            throw new IllegalStateException("Offer is not pending.");
+        }
+        offerRepository.updateStatus(offerId, accept
+                ? TransferOfferStatus.ACCEPTED : TransferOfferStatus.REJECTED);
+        return offerRepository.findById(offerId);
     }
 }

@@ -85,6 +85,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.3</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <footballcareer.database.url>jdbc:sqlite:target/football-career-test.db</footballcareer.database.url>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
 
             <!-- Ejecutar JavaFX -->

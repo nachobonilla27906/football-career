@@ -33,8 +33,10 @@ public class MatchEventGenerationService {
             throw new IllegalStateException("Match events have already been generated.");
         }
 
-        MatchLineup home = lineupService.selectMatchLineup(match.getHomeTeam().getId());
-        MatchLineup away = lineupService.selectMatchLineup(match.getAwayTeam().getId());
+        MatchLineup home = lineupService.selectMatchLineup(
+                match.getId(), match.getHomeTeam().getId());
+        MatchLineup away = lineupService.selectMatchLineup(
+                match.getId(), match.getAwayTeam().getId());
         List<MatchEvent> events = new ArrayList<>();
         generateGoals(match, match.getHomeTeam(), home.getStarters(),
                 match.getHomeGoals(), events);
