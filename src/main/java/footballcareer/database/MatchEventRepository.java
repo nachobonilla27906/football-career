@@ -17,21 +17,28 @@ import java.util.List;
 public class MatchEventRepository {
     public void save(MatchEvent event) {
         validate(event);
-        String sql = """
+        Long careerId = CareerContext.getCareerId();
+        String sql = careerId == null ? """
                 INSERT INTO match_events
                     (match_id, team_id, player_id, secondary_player_id, minute, type)
                 VALUES (?, ?, ?, ?, ?, ?)
+                """ : """
+                INSERT INTO career_match_events
+                    (career_id, match_id, team_id, player_id, secondary_player_id, minute, type)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      sql, Statement.RETURN_GENERATED_KEYS)) {
-            statement.setLong(1, event.getMatch().getId());
-            statement.setLong(2, event.getTeam().getId());
-            statement.setLong(3, event.getPlayer().getId());
-            if (event.getSecondaryPlayer() == null) statement.setNull(4, java.sql.Types.INTEGER);
-            else statement.setLong(4, event.getSecondaryPlayer().getId());
-            statement.setInt(5, event.getMinute());
-            statement.setString(6, event.getType().name());
+            int offset = 0;
+            if (careerId != null) statement.setLong(++offset, careerId);
+            statement.setLong(++offset, event.getMatch().getId());
+            statement.setLong(++offset, event.getTeam().getId());
+            statement.setLong(++offset, event.getPlayer().getId());
+            if (event.getSecondaryPlayer() == null) statement.setNull(++offset, java.sql.Types.INTEGER);
+            else statement.setLong(++offset, event.getSecondaryPlayer().getId());
+            statement.setInt(++offset, event.getMinute());
+            statement.setString(++offset, event.getType().name());
             statement.executeUpdate();
             try (ResultSet keys = statement.getGeneratedKeys()) {
                 if (keys.next()) event.setId(keys.getLong(1));
@@ -42,11 +49,15 @@ public class MatchEventRepository {
     }
 
     public List<MatchEvent> findByMatch(long matchId) {
-        String sql = "SELECT * FROM match_events WHERE match_id = ? ORDER BY minute, id";
+        Long careerId = CareerContext.getCareerId();
+        String sql = careerId == null
+                ? "SELECT * FROM match_events WHERE match_id = ? ORDER BY minute, id"
+                : "SELECT * FROM career_match_events WHERE career_id = ? AND match_id = ? ORDER BY minute, id";
         List<MatchEvent> events = new ArrayList<>();
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, matchId);
+            if (careerId == null) statement.setLong(1, matchId);
+            else { statement.setLong(1, careerId); statement.setLong(2, matchId); }
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) events.add(mapEvent(rs));
             }

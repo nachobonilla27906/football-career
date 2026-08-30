@@ -2,7 +2,6 @@ package footballcareer;
 
 import footballcareer.database.CompetitionRepository;
 import footballcareer.database.CompetitionTeamRepository;
-import footballcareer.database.DataSeeder;
 import footballcareer.database.DatabaseInitializer;
 import footballcareer.database.MatchRepository;
 import footballcareer.database.SeasonRepository;
@@ -29,8 +28,7 @@ class ScheduleServiceTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
 
         competitionRepository = new CompetitionRepository();
         season = new SeasonRepository().findFirst();

@@ -1,6 +1,7 @@
 package footballcareer.service;
 
 import footballcareer.database.Database;
+import footballcareer.database.CareerContext;
 import footballcareer.model.Career;
 
 import java.sql.Connection;
@@ -35,6 +36,11 @@ public class TrainingService {
             case RECOVERY, BALANCED -> 1;
             case INTENSIVE -> -1;
         };
+        int coachLevel = new StaffService().level(career.getId(), StaffService.Role.COACH);
+        if (form > 0) form += coachLevel / 2;
+        if (form > 0) form += new ManagerIdentityService().trainingFormBonus(
+                new ManagerIdentityService().identity(career.getId()));
+        if (type == TrainingType.RECOVERY) fitness += coachLevel / 2;
         try (Connection connection = Database.getConnection()) {
             connection.setAutoCommit(false);
             try {
@@ -113,16 +119,23 @@ public class TrainingService {
 
     private int updateSquad(Connection connection, long teamId, int form, int fitness,
             int morale) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE player_state
+        Long careerId = CareerContext.getCareerId();
+        String stateTable = careerId == null ? "player_state" : "career_player_state";
+        String membership = careerId == null ? "player_team" : "career_player_team";
+        String sql = """
+                UPDATE %s
                 SET form = MAX(0, MIN(100, form + ?)),
                     fitness = MAX(0, MIN(100, fitness + ?)),
                     morale = MAX(0, MIN(100, morale + ?))
                 WHERE player_id IN (
-                    SELECT player_id FROM player_team
-                    WHERE team_id = ? AND end_date IS NULL
+                    SELECT player_id FROM %s
+                    WHERE team_id = ? AND end_date IS NULL %s
                 )
-                """)) {
+                %s
+                """.formatted(stateTable, membership,
+                careerId == null ? "" : "AND career_id = " + careerId,
+                careerId == null ? "" : "AND career_id = " + careerId);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, form);
             statement.setInt(2, fitness);
             statement.setInt(3, morale);

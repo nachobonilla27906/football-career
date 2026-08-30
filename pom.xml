@@ -77,6 +77,10 @@
 
                 <configuration>
                     <release>21</release>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Xlint:all</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
 
@@ -106,5 +110,64 @@
         </plugins>
 
     </build>
+
+    <profiles>
+        <!-- Validación habitual durante el desarrollo: persistencia y flujos críticos. -->
+        <profile>
+            <id>fast</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/DatabaseIsolationTest.java</include>
+                                <include>**/AppDiagnosticsTest.java</include>
+                                <include>**/SourceEncodingTest.java</include>
+                                <include>**/CareerMatchIsolationTest.java</include>
+                                <include>**/CareerTransferIsolationTest.java</include>
+                                <include>**/CareerInsightServiceTest.java</include>
+                                <include>**/TransferOfferServiceTest.java</include>
+                                <include>**/LoanServiceTest.java</include>
+                                <include>**/YouthAcademyServiceTest.java</include>
+                                <include>**/StaffServiceTest.java</include>
+                                <include>**/ViewportPolicyTest.java</include>
+                                <include>**/CareerShellIconographyTest.java</include>
+                                <include>**/NavigationStateTest.java</include>
+                                <include>**/ManagerReputationServiceTest.java</include>
+                                <include>**/CareerActivityServiceTest.java</include>
+                                <include>**/ArchitectureBoundaryTest.java</include>
+                                <include>**/CareerNavigationControllerTest.java</include>
+                                <include>**/MarketSearchControllerTest.java</include>
+                                <include>**/CareerRepairServiceTest.java</include>
+                                <include>**/ClubTransferAiServiceTest.java</include>
+                                <include>**/LeagueStandingRepositoryTest.java</include>
+                                <include>**/PlayerStatsAndLineupTest.java</include>
+                                <include>**/Day9IntegrationTest.java</include>
+                                <include>**/TrainingServiceTest.java</include>
+                                <include>**/MatchSimulationTacticsTest.java</include>
+                                <include>**/LiveMatchExperienceTest.java</include>
+                                <include>**/PlayerConversationServiceTest.java</include>
+                                <include>**/ClubNegotiationPolicyTest.java</include>
+                                <include>**/PlayerAgentServiceTest.java</include>
+                                <include>**/CareerDifficultyServiceTest.java</include>
+                                <include>**/ManagerIdentityServiceTest.java</include>
+                                <include>**/TransferHistoryServiceTest.java</include>
+                                 <include>**/MatchRoleRepositoryTest.java</include>
+                                 <include>**/TeamSheetRepositoryTest.java</include>
+                                 <include>**/PlayerRoleAssessmentServiceTest.java</include>
+                                 <include>**/PlayerProgressSummaryServiceTest.java</include>
+                                 <include>**/JavaFxLayoutSmokeTest.java</include>
+                                 <include>**/PlayerRepositoryCacheTest.java</include>
+                                 <include>**/IncrementalLiveMatchServiceTest.java</include>
+                                 <include>**/RetainedScreenStoreTest.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

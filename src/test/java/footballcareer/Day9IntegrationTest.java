@@ -14,8 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class Day9IntegrationTest {
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
     }
 
     @Test

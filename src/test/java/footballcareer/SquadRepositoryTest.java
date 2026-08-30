@@ -18,8 +18,7 @@ class SquadRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         playerRepository = new PlayerRepository();
         playerTeamRepository = new PlayerTeamRepository();
         arsenal = new TeamRepository().findByShortName("ARS");

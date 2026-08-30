@@ -3,7 +3,6 @@ package footballcareer;
 import footballcareer.database.*;
 import footballcareer.model.Contract;
 import footballcareer.model.Player;
-import footballcareer.model.Season;
 import footballcareer.model.Team;
 import footballcareer.service.ContractRenewalService;
 import org.junit.jupiter.api.Test;
@@ -15,9 +14,7 @@ class ContractRenewalServiceTest {
 
     @Test
     void renewalUpdatesContractAndWageSpendAtomically() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
-        Season season = new SeasonRepository().findFirst();
+        DatabaseInitializer.resetAndSeedForTests();
         Team liverpool = new TeamRepository().findByShortName("LIV");
         Player player = new PlayerRepository().findCurrentPlayersByTeam(liverpool.getId()).getFirst();
         ContractRepository contracts = new ContractRepository();

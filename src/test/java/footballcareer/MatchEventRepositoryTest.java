@@ -19,8 +19,7 @@ class MatchEventRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         repository = new MatchEventRepository();
         Season season = new SeasonRepository().findFirst();
         Competition competition = new CompetitionRepository()

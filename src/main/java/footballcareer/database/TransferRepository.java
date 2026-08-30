@@ -11,7 +11,7 @@ import java.util.List;
 
 public class TransferRepository {
     public Transfer findByOffer(long offerId) {
-        String sql = "SELECT * FROM transfers WHERE offer_id = ?";
+        String sql = "SELECT * FROM transfers WHERE offer_id = ? AND " + careerScope();
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, offerId);
@@ -27,9 +27,9 @@ public class TransferRepository {
     public List<Transfer> findByTeam(long teamId) {
         String sql = """
                 SELECT * FROM transfers
-                WHERE from_team_id = ? OR to_team_id = ?
+                WHERE (from_team_id = ? OR to_team_id = ?) AND %s
                 ORDER BY transfer_date DESC, id DESC
-                """;
+                """.formatted(careerScope());
         List<Transfer> transfers = new ArrayList<>();
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -42,6 +42,11 @@ public class TransferRepository {
         } catch (SQLException e) {
             throw new RuntimeException("Could not find club transfer history.", e);
         }
+    }
+
+    private String careerScope() {
+        Long careerId = CareerContext.getCareerId();
+        return careerId == null ? "career_id IS NULL" : "career_id = " + careerId;
     }
 
     private Transfer mapTransfer(ResultSet rs) throws SQLException {

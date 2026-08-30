@@ -13,8 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class Day3IntegrationTest {
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
     }
 
     @Test

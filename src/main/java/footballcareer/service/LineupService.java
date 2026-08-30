@@ -3,6 +3,11 @@ package footballcareer.service;
 import footballcareer.database.PlayerRepository;
 import footballcareer.database.PlayerStateRepository;
 import footballcareer.database.MatchLineupRepository;
+import footballcareer.database.CareerContext;
+import footballcareer.database.CareerRepository;
+import footballcareer.database.MatchRoleRepository;
+import footballcareer.database.MatchTacticsRepository;
+import footballcareer.database.TeamSheetRepository;
 import footballcareer.model.Player;
 import footballcareer.model.MatchLineup;
 import footballcareer.model.Team;
@@ -38,16 +43,20 @@ public class LineupService {
     }
 
     public MatchLineup selectMatchLineup(long teamId) {
+        java.util.Map<Long, footballcareer.model.PlayerState> states = stateRepository.findAll();
+        java.time.LocalDate currentDate = CareerContext.getCareerId() == null
+                ? java.time.LocalDate.now()
+                : new CareerRepository().findById(CareerContext.getCareerId()).getCurrentDate();
         List<Player> eligible = new ArrayList<>(playerRepository
                 .findCurrentPlayersByTeam(teamId).stream()
-                .filter(this::isFitToPlay)
+                .filter(player -> isFitToPlay(player, states, currentDate))
                 .toList());
         if (eligible.size() < 11) {
             throw new IllegalStateException("Team needs at least eleven players.");
         }
 
         Comparator<Player> quality = Comparator
-                .comparingInt(this::selectionScore).reversed();
+                .comparingInt((Player player) -> selectionScore(player, states)).reversed();
         Player goalkeeper = eligible.stream()
                 .filter(player -> player.getPosition() == Position.GK)
                 .max(quality).orElseThrow(() ->
@@ -78,7 +87,25 @@ public class LineupService {
 
     public MatchLineup selectMatchLineup(long matchId, long teamId) {
         MatchLineup saved = matchLineupRepository.find(matchId, teamId);
-        return saved != null ? saved : selectMatchLineup(teamId);
+        if (saved != null) return saved;
+        Long careerId = CareerContext.getCareerId();
+        TeamSheetRepository.Sheet base = careerId == null ? null
+                : new TeamSheetRepository().find(careerId, teamId);
+        if (base != null && baseSheetStillBelongsToTeam(base, teamId)) {
+            matchLineupRepository.save(matchId, teamId, base.starters(), base.substitutes());
+            new MatchTacticsRepository().save(matchId, teamId, base.tactics());
+            new MatchRoleRepository().save(matchId, teamId, base.roles());
+            return matchLineupRepository.find(matchId, teamId);
+        }
+        return selectMatchLineup(teamId);
+    }
+
+    private boolean baseSheetStillBelongsToTeam(TeamSheetRepository.Sheet sheet, long teamId) {
+        Set<Long> currentIds = playerRepository.findCurrentPlayersByTeam(teamId).stream()
+                .map(Player::getId).collect(java.util.stream.Collectors.toSet());
+        return sheet.starters().size() == 11
+                && sheet.starters().stream().allMatch(player -> currentIds.contains(player.getId()))
+                && sheet.substitutes().stream().allMatch(player -> currentIds.contains(player.getId()));
     }
 
     private void pickBest(List<Player> available, List<Player> selected,
@@ -90,13 +117,16 @@ public class LineupService {
         available.removeAll(candidates);
     }
 
-    private boolean isFitToPlay(Player player) {
-        var state = stateRepository.findByPlayer(player.getId());
-        return state != null && state.getFitness() >= 20;
+    private boolean isFitToPlay(Player player,
+            java.util.Map<Long, footballcareer.model.PlayerState> states,
+            java.time.LocalDate currentDate) {
+        var state = states.get(player.getId());
+        return state != null && state.getFitness() >= 20 && state.isAvailableOn(currentDate);
     }
 
-    private int selectionScore(Player player) {
-        var state = stateRepository.findByPlayer(player.getId());
+    private int selectionScore(Player player,
+            java.util.Map<Long, footballcareer.model.PlayerState> states) {
+        var state = states.get(player.getId());
         return player.getOverall() * 2 + state.getForm() + state.getFitness();
     }
 }

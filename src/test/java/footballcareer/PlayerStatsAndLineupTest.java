@@ -17,8 +17,7 @@ class PlayerStatsAndLineupTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         season = new SeasonRepository().findFirst();
         arsenal = new TeamRepository().findByShortName("ARS");
     }
@@ -52,6 +51,29 @@ class PlayerStatsAndLineupTest {
         MatchLineup lineup = new LineupService(new PlayerRepository(), states)
                 .selectMatchLineup(arsenal.getId());
 
+        assertTrue(lineup.getStarters().stream()
+                .noneMatch(player -> player.getId() == unavailable.getId()));
+        assertTrue(lineup.getSubstitutes().stream()
+                .noneMatch(player -> player.getId() == unavailable.getId()));
+    }
+
+    @Test
+    void shouldPersistMedicalStatusAndExcludeUnavailablePlayers() {
+        Player unavailable = new PlayerRepository()
+                .findCurrentPlayersByTeam(arsenal.getId()).stream()
+                .filter(player -> player.getPosition() != Position.GK)
+                .findFirst().orElseThrow();
+        PlayerStateRepository states = new PlayerStateRepository();
+        java.time.LocalDate until = java.time.LocalDate.now().plusDays(10);
+        states.setUnavailable(unavailable.getId(), until, "INJURY");
+
+        PlayerState reloaded = states.findByPlayer(unavailable.getId());
+        MatchLineup lineup = new LineupService(new PlayerRepository(), states)
+                .selectMatchLineup(arsenal.getId());
+
+        assertEquals("INJURY", reloaded.getUnavailableReason());
+        assertEquals(until, reloaded.getUnavailableUntil());
+        assertFalse(reloaded.isAvailableOn(java.time.LocalDate.now()));
         assertTrue(lineup.getStarters().stream()
                 .noneMatch(player -> player.getId() == unavailable.getId()));
         assertTrue(lineup.getSubstitutes().stream()

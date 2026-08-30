@@ -19,8 +19,7 @@ class MatchDayServiceTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         Season season = new SeasonRepository().findFirst();
         competition = new CompetitionRepository()
                 .findByNameAndSeason("LaLiga", season.getId());
@@ -67,6 +66,10 @@ class MatchDayServiceTest {
         assertTrue(awayStats.getShotsOnTarget() <= awayStats.getShots());
         assertTrue(homeStats.getShotsOnTarget() >= played.getHomeGoals());
         assertTrue(awayStats.getShotsOnTarget() >= played.getAwayGoals());
+        assertTrue(homeStats.getExpectedGoals() > 0);
+        assertTrue(homeStats.getPasses() >= 230);
+        assertTrue(homeStats.getPassAccuracy() >= 65);
+        assertTrue(homeStats.getTackles() >= 8);
         MatchReport report = new MatchReportService().build(played.getId());
         assertEquals(played.getId(), report.getMatch().getId());
         assertEquals(events.size(), report.getEvents().size());
@@ -95,9 +98,23 @@ class MatchDayServiceTest {
         MatchDayService service = new MatchDayService(matchRepository,
                 standingRepository, new MatchSimulationService(new Random(44)));
 
-        service.processBackgroundMatchesOn(controlledMatch.getDate(), controlledTeamId);
+        java.util.List<Match> background = service.processBackgroundMatchesOn(
+                controlledMatch.getDate(), controlledTeamId);
 
         assertFalse(matchRepository.findById(controlledMatch.getId()).isPlayed());
+        assertFalse(background.isEmpty());
+        background.forEach(match -> {
+            java.util.List<MatchEvent> events = new MatchEventRepository()
+                    .findByMatch(match.getId());
+            assertEquals(match.getHomeGoals() + match.getAwayGoals(), events.stream()
+                    .filter(event -> event.getType() == MatchEventType.GOAL).count());
+            assertEquals(2, new MatchTeamStatsRepository().findByMatch(match.getId()).size());
+            MatchReport report = new MatchReportService().build(match.getId());
+            assertNotNull(report.getHomeStats());
+            assertNotNull(report.getAwayStats());
+            report.getEvents().forEach(event -> assertFalse(
+                    event.getPlayer().getFullName().isBlank()));
+        });
         service.processControlledMatchesOn(controlledMatch.getDate(), controlledTeamId);
         assertTrue(matchRepository.findById(controlledMatch.getId()).isPlayed());
         assertNotNull(new MatchReportService().build(controlledMatch.getId()));

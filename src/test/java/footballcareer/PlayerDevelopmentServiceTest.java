@@ -13,8 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PlayerDevelopmentServiceTest {
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
     }
 
     @Test

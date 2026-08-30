@@ -6,7 +6,8 @@ import java.sql.*;
 
 public class PlayerSeasonStatsRepository {
     public void initializeForSeason(long seasonId) {
-        String sql = """
+        Long careerId = CareerContext.getCareerId();
+        String sql = careerId == null ? """
                 INSERT INTO player_season_stats (player_id, season_id, team_id)
                 SELECT pt.player_id, ?, pt.team_id
                 FROM player_team pt
@@ -15,11 +16,26 @@ public class PlayerSeasonStatsRepository {
                     SELECT 1 FROM player_season_stats ps
                     WHERE ps.player_id = pt.player_id AND ps.season_id = ?
                   )
+                """ : """
+                INSERT INTO career_player_season_stats
+                    (career_id, player_id, season_id, team_id)
+                SELECT ?, pt.player_id, ?, pt.team_id
+                FROM career_player_team pt
+                WHERE pt.career_id = ? AND pt.end_date IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM career_player_season_stats ps
+                    WHERE ps.career_id = ? AND ps.player_id = pt.player_id AND ps.season_id = ?
+                  )
                 """;
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, seasonId);
-            statement.setLong(2, seasonId);
+            if (careerId == null) {
+                statement.setLong(1, seasonId); statement.setLong(2, seasonId);
+            } else {
+                statement.setLong(1, careerId); statement.setLong(2, seasonId);
+                statement.setLong(3, careerId); statement.setLong(4, careerId);
+                statement.setLong(5, seasonId);
+            }
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Could not initialize player stats.", e);
@@ -27,10 +43,10 @@ public class PlayerSeasonStatsRepository {
     }
 
     public PlayerSeasonStats find(long playerId, long seasonId) {
-        String sql = """
-                SELECT * FROM player_season_stats
-                WHERE player_id = ? AND season_id = ?
-                """;
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "player_season_stats" : "career_player_season_stats";
+        String sql = "SELECT * FROM " + table + " WHERE player_id = ? AND season_id = ?"
+                + (careerId == null ? "" : " AND career_id = " + careerId);
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, playerId);
@@ -62,15 +78,17 @@ public class PlayerSeasonStatsRepository {
             long playerId, long seasonId, boolean started, int minutes,
             int goals, int assists, int yellowCards, int redCards, double rating
     ) {
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "player_season_stats" : "career_player_season_stats";
         String sql = """
-                UPDATE player_season_stats SET
+                UPDATE %s SET
                     average_rating = ((average_rating * appearances) + ?) / (appearances + 1),
                     appearances = appearances + 1,
                     starts = starts + ?, minutes = minutes + ?,
                     goals = goals + ?, assists = assists + ?,
                     yellow_cards = yellow_cards + ?, red_cards = red_cards + ?
-                WHERE player_id = ? AND season_id = ?
-                """;
+                WHERE player_id = ? AND season_id = ? %s
+                """.formatted(table, careerId == null ? "" : "AND career_id = " + careerId);
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setDouble(1, Math.max(0, Math.min(10, rating)));

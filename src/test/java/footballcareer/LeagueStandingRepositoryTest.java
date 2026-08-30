@@ -16,8 +16,7 @@ class LeagueStandingRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         Season season = new SeasonRepository().findFirst();
         competition = new CompetitionRepository()
                 .findByNameAndSeason("LaLiga", season.getId());

@@ -17,6 +17,8 @@ public class Player {
 
     private Position position;
     private PreferredFoot preferredFoot;
+    private int heightCm = 180;
+    private Position secondaryPosition;
 
     private int overall;
     private int potential;
@@ -130,6 +132,13 @@ public class Player {
 
     public void setPreferredFoot(PreferredFoot preferredFoot) {
         this.preferredFoot = preferredFoot;
+    }
+
+    public int getHeightCm() { return heightCm; }
+    public void setHeightCm(int heightCm) { this.heightCm = heightCm; }
+    public Position getSecondaryPosition() { return secondaryPosition; }
+    public void setSecondaryPosition(Position secondaryPosition) {
+        this.secondaryPosition = secondaryPosition;
     }
 
     public int getOverall() {

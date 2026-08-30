@@ -12,8 +12,7 @@ class MatchSimulationTacticsTest {
 
     @Test
     void formationsProvideDifferentAttackAndDefenceProfiles() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         Season season = new SeasonRepository().findFirst();
         new FootballWorldService().prepareSeason(season.getId());
         Competition competition = new CompetitionRepository().findBySeason(season.getId()).getFirst();
@@ -31,5 +30,18 @@ class MatchSimulationTacticsTest {
 
         assertTrue(attacking.attackBonus() > defensive.attackBonus());
         assertTrue(defensive.defenceBonus() > attacking.defenceBonus());
+
+        tactics.save(match.getId(), teamId, new MatchTacticsRepository.TacticalSetup(
+                "4-3-3", "ATTACKING", "HIGH", "FAST"));
+        MatchSimulationService.TacticalProfile aggressive =
+                simulation.tacticalProfile(match.getId(), teamId);
+        tactics.save(match.getId(), teamId, new MatchTacticsRepository.TacticalSetup(
+                "4-2-3-1", "DEFENSIVE", "LOW", "SLOW"));
+        MatchSimulationService.TacticalProfile conservative =
+                simulation.tacticalProfile(match.getId(), teamId);
+
+        assertTrue(aggressive.attackBonus() > conservative.attackBonus());
+        assertTrue(conservative.defenceBonus() > aggressive.defenceBonus());
+        assertTrue(tactics.find(match.getId(), teamId).mentality().equals("DEFENSIVE"));
     }
 }

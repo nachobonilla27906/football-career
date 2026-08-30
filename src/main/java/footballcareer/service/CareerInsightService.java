@@ -9,7 +9,10 @@ import java.util.List;
 
 public class CareerInsightService {
     public enum Status { ON_TRACK, AT_RISK, PENDING }
+    public enum NotificationType { MATCH, TRANSFER, FITNESS, TRAINING, MEDICAL, PLAYER, BOARD }
     public record Objective(String title, String detail, Status status) {}
+    public record Notification(NotificationType type, String title, String detail,
+                               boolean urgent) {}
 
     public List<Objective> objectives(Career career) {
         List<Objective> objectives = new ArrayList<>();
@@ -73,6 +76,65 @@ public class CareerInsightService {
         return news;
     }
 
+    public List<Notification> notifications(Career career) {
+        List<Notification> notifications = new ArrayList<>();
+        long teamId = career.getControlledTeam().getId();
+        List<TransferOffer> offers = new TransferOfferRepository()
+                .findPendingBySellingTeam(teamId);
+        if (!offers.isEmpty()) {
+            notifications.add(new Notification(NotificationType.TRANSFER,
+                    offers.size() == 1 ? "Nueva oferta recibida"
+                            : offers.size() + " ofertas recibidas",
+                    "Hay propuestas pendientes de respuesta en Traspasos.", true));
+        }
+
+        competitions(career).stream()
+                .flatMap(competition -> new MatchRepository()
+                        .findByCompetition(competition.getId()).stream())
+                .filter(match -> !match.isPlayed())
+                .filter(match -> match.getHomeTeam().getId() == teamId
+                        || match.getAwayTeam().getId() == teamId)
+                .filter(match -> !match.getDate().isBefore(career.getCurrentDate()))
+                .min(Comparator.comparing(Match::getDate)).ifPresent(match -> {
+                    long days = java.time.temporal.ChronoUnit.DAYS.between(
+                            career.getCurrentDate(), match.getDate());
+                    if (days <= 3) notifications.add(new Notification(NotificationType.MATCH,
+                            days == 0 ? "Partido hoy" : "Partido en " + days + " días",
+                            match.getHomeTeam().getShortName() + " vs "
+                                    + match.getAwayTeam().getShortName() + " · "
+                                    + match.getCompetition().getName(), days == 0));
+                });
+
+        long tired = tiredPlayers(teamId);
+        if (tired > 0) notifications.add(new Notification(NotificationType.FITNESS,
+                "Plantilla fatigada", tired + " jugador(es) están por debajo de 70 de fitness.",
+                tired >= 4));
+        long unavailable = unavailablePlayers(teamId, career.getCurrentDate());
+        if (unavailable > 0) notifications.add(new Notification(NotificationType.MEDICAL,
+                "Bajas en la plantilla", unavailable + " jugador(es) no están disponibles.", true));
+        if (new TrainingService().findToday(career) == null) {
+            notifications.add(new Notification(NotificationType.TRAINING,
+                    "Entrenamiento pendiente",
+                    "Todavía no has elegido la sesión de entrenamiento de hoy.", false));
+        }
+        List<SquadDynamicsService.Concern> concerns = new SquadDynamicsService()
+                .concerns(teamId);
+        if (!concerns.isEmpty()) {
+            SquadDynamicsService.Concern concern = concerns.getFirst();
+            notifications.add(new Notification(NotificationType.PLAYER,
+                    "Jugador descontento: " + concern.player().getFullName(),
+                    concern.role() + "  •  Moral " + concern.morale()
+                            + "  •  " + concern.message(), concern.morale() < 30));
+        }
+        ManagerEvaluationService.Evaluation evaluation = new ManagerEvaluationService()
+                .evaluate(career);
+        if (evaluation.confidence() < 50) notifications.add(new Notification(
+                NotificationType.BOARD, "La directiva evalúa tu continuidad",
+                "Confianza " + evaluation.confidence() + "/100  •  " + evaluation.status(),
+                evaluation.dismissalRisk()));
+        return notifications;
+    }
+
     private List<Competition> competitions(Career career) {
         return new CompetitionTeamRepository().findCompetitionsByTeam(
                 career.getControlledTeam().getId()).stream()
@@ -88,16 +150,26 @@ public class CareerInsightService {
 
     private double averageFitness(long teamId) {
         PlayerStateRepository states = new PlayerStateRepository();
+        java.util.Map<Long, PlayerState> allStates = states.findAll();
         return new PlayerRepository().findCurrentPlayersByTeam(teamId).stream()
-                .map(player -> states.findByPlayer(player.getId()))
+                .map(player -> allStates.get(player.getId()))
                 .filter(java.util.Objects::nonNull).mapToInt(PlayerState::getFitness)
                 .average().orElse(0);
     }
 
     private long tiredPlayers(long teamId) {
         PlayerStateRepository states = new PlayerStateRepository();
+        java.util.Map<Long, PlayerState> allStates = states.findAll();
         return new PlayerRepository().findCurrentPlayersByTeam(teamId).stream()
-                .map(player -> states.findByPlayer(player.getId()))
+                .map(player -> allStates.get(player.getId()))
                 .filter(java.util.Objects::nonNull).filter(state -> state.getFitness() < 70).count();
+    }
+
+    private long unavailablePlayers(long teamId, java.time.LocalDate date) {
+        java.util.Map<Long, PlayerState> allStates = new PlayerStateRepository().findAll();
+        return new PlayerRepository().findCurrentPlayersByTeam(teamId).stream()
+                .map(player -> allStates.get(player.getId()))
+                .filter(java.util.Objects::nonNull)
+                .filter(state -> !state.isAvailableOn(date)).count();
     }
 }

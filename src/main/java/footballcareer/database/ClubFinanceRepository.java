@@ -29,7 +29,9 @@ public class ClubFinanceRepository {
     }
 
     public ClubFinance findByTeam(long teamId) {
-        String sql = "SELECT * FROM club_finances WHERE team_id = ?";
+        Long careerId = CareerContext.getCareerId();
+        String sql = careerId == null ? "SELECT * FROM club_finances WHERE team_id = ?"
+                : "SELECT * FROM career_club_finances WHERE team_id = ? AND career_id = " + careerId;
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, teamId);
@@ -51,11 +53,13 @@ public class ClubFinanceRepository {
 
     public void spendTransferBudget(long teamId, double amount) {
         if (amount <= 0) throw new IllegalArgumentException("Amount must be positive.");
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "club_finances" : "career_club_finances";
         String sql = """
-                UPDATE club_finances
+                UPDATE %s
                 SET transfer_budget = transfer_budget - ?, balance = balance - ?
-                WHERE team_id = ? AND transfer_budget >= ?
-                """;
+                WHERE team_id = ? AND transfer_budget >= ? %s
+                """.formatted(table, careerId == null ? "" : "AND career_id = " + careerId);
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setDouble(1, amount);
@@ -72,11 +76,13 @@ public class ClubFinanceRepository {
 
     public void receiveTransferFee(long teamId, double amount) {
         if (amount <= 0) throw new IllegalArgumentException("Amount must be positive.");
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "club_finances" : "career_club_finances";
         String sql = """
-                UPDATE club_finances
+                UPDATE %s
                 SET transfer_budget = transfer_budget + ?, balance = balance + ?
-                WHERE team_id = ?
-                """;
+                WHERE team_id = ? %s
+                """.formatted(table, careerId == null ? "" : "AND career_id = " + careerId);
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setDouble(1, amount);

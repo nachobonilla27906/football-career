@@ -1,6 +1,7 @@
 package footballcareer.service;
 
 import footballcareer.database.Database;
+import footballcareer.database.CareerContext;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -40,10 +41,12 @@ public class ContractRenewalService {
 
     private ContractData currentContract(Connection connection, long playerId, long teamId)
             throws SQLException {
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "contracts" : "career_contracts";
         String sql = """
-                SELECT id, end_date, salary FROM contracts
-                WHERE player_id = ? AND team_id = ? AND active = 1
-                """;
+                SELECT id, end_date, salary FROM %s
+                WHERE player_id = ? AND team_id = ? AND active = 1 %s
+                """.formatted(table, careerId == null ? "" : "AND career_id = " + careerId);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, playerId);
             statement.setLong(2, teamId);
@@ -58,10 +61,12 @@ public class ContractRenewalService {
     }
 
     private double availableWageBudget(Connection connection, long teamId) throws SQLException {
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "club_finances" : "career_club_finances";
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT wage_budget - current_wage_spend AS available
-                FROM club_finances WHERE team_id = ?
-                """)) {
+                FROM %s WHERE team_id = ? %s
+                """.formatted(table, careerId == null ? "" : "AND career_id = " + careerId))) {
             statement.setLong(1, teamId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (!resultSet.next()) throw new IllegalStateException("No existen finanzas del club.");
@@ -72,8 +77,11 @@ public class ContractRenewalService {
 
     private void updateContract(Connection connection, long contractId, LocalDate endDate,
             double salary) throws SQLException {
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "contracts" : "career_contracts";
         try (PreparedStatement statement = connection.prepareStatement(
-                "UPDATE contracts SET end_date = ?, salary = ? WHERE id = ?")) {
+                "UPDATE " + table + " SET end_date = ?, salary = ? WHERE id = ?"
+                        + (careerId == null ? "" : " AND career_id = " + careerId))) {
             statement.setString(1, endDate.toString());
             statement.setDouble(2, salary);
             statement.setLong(3, contractId);
@@ -83,6 +91,7 @@ public class ContractRenewalService {
 
     private void updatePlayerSalary(Connection connection, long playerId, double salary)
             throws SQLException {
+        if (CareerContext.getCareerId() != null) return;
         try (PreparedStatement statement = connection.prepareStatement(
                 "UPDATE players SET salary = ? WHERE id = ?")) {
             statement.setDouble(1, salary);
@@ -93,10 +102,12 @@ public class ContractRenewalService {
 
     private void updateWageSpend(Connection connection, long teamId, double difference)
             throws SQLException {
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "club_finances" : "career_club_finances";
         try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE club_finances SET current_wage_spend = current_wage_spend + ?
-                WHERE team_id = ?
-                """)) {
+                UPDATE %s SET current_wage_spend = current_wage_spend + ?
+                WHERE team_id = ? %s
+                """.formatted(table, careerId == null ? "" : "AND career_id = " + careerId))) {
             statement.setDouble(1, difference);
             statement.setLong(2, teamId);
             statement.executeUpdate();

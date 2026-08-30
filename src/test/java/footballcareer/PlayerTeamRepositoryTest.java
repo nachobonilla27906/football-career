@@ -81,6 +81,7 @@ class PlayerTeamRepositoryTest {
 
         assertNotNull(currentTeamId);
         assertEquals(team.getId(), currentTeamId);
+        assertEquals(team.getId(), repository.findAllCurrentTeamIds().get(player.getId()));
     }
 
     @Test

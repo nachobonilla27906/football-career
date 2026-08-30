@@ -474,6 +474,8 @@ public class DataSeeder {
                             Double.parseDouble(data[14]),
                             Double.parseDouble(data[15])
                     );
+                    player.setHeightCm(heightFor(player.getPosition(), firstName + lastName));
+                    player.setSecondaryPosition(secondaryPosition(player.getPosition()));
 
                     playerRepository.save(player);
                 }
@@ -495,6 +497,9 @@ public class DataSeeder {
                                         player.getId()
                                 );
 
+                playerTeamRepository.ensureInitialAssignment(
+                        player.getId(), team.getId(), season.getStartDate());
+
                 if (currentTeamId == null) {
 
                     playerTeamRepository.assignPlayerToTeam(
@@ -512,6 +517,22 @@ public class DataSeeder {
                     e
             );
         }
+    }
+
+    private static int heightFor(Position position, String identity) {
+        int base = switch (position) {
+            case GK -> 189; case CB, ST -> 184; case CDM -> 181;
+            case LB, RB -> 177; default -> 175;
+        };
+        return base + Math.floorMod(identity.hashCode(), 7) - 3;
+    }
+
+    private static Position secondaryPosition(Position position) {
+        return switch (position) {
+            case GK -> null; case CB -> Position.CDM; case LB, RB -> Position.CB;
+            case CDM -> Position.CM; case CM -> Position.CAM; case CAM -> Position.CM;
+            case LW -> Position.RW; case RW -> Position.LW; case ST -> Position.LW;
+        };
     }
 
     private static BufferedReader openFile(

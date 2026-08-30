@@ -15,8 +15,7 @@ class PlayerMarketRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         repository = new PlayerMarketRepository();
         valencia = new TeamRepository().findByShortName("VCF");
         Team arsenal = new TeamRepository().findByShortName("ARS");
@@ -29,6 +28,8 @@ class PlayerMarketRepositoryTest {
         repository.listForTransfer(arsenalPlayer.getId(), 25_000_000);
 
         assertEquals(25_000_000, repository.findAskingPrice(arsenalPlayer.getId()));
+        assertEquals(25_000_000,
+                repository.findAllAskingPrices().get(arsenalPlayer.getId()));
         assertTrue(repository.findTransferListed(valencia.getId()).stream()
                 .anyMatch(player -> player.getId() == arsenalPlayer.getId()));
 

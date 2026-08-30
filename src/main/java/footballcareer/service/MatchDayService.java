@@ -22,6 +22,9 @@ public class MatchDayService {
     private final MatchEventGenerationService eventGenerationService;
     private final MatchStatisticsService statisticsService;
     private final LightweightMatchSimulationService lightweightSimulationService;
+    private final LightweightMatchDetailService lightweightDetailService;
+    private final PlayerAvailabilityService availabilityService;
+    private final SquadDynamicsService dynamicsService;
 
     public MatchDayService(
             MatchRepository matchRepository,
@@ -66,6 +69,9 @@ public class MatchDayService {
         this.eventGenerationService = eventGenerationService;
         this.statisticsService = statisticsService;
         this.lightweightSimulationService = new LightweightMatchSimulationService();
+        this.lightweightDetailService = new LightweightMatchDetailService();
+        this.availabilityService = new PlayerAvailabilityService();
+        this.dynamicsService = new SquadDynamicsService();
     }
 
     public List<Match> processMatchesOn(LocalDate date) {
@@ -84,6 +90,8 @@ public class MatchDayService {
             if (playerMatchService != null) {
                 playerMatchService.process(match);
             }
+            availabilityService.processMatch(match);
+            dynamicsService.processUnusedPlayers(match);
             processed.add(match);
         }
 
@@ -97,6 +105,8 @@ public class MatchDayService {
             lightweightSimulationService.simulate(match);
             standingRepository.applyResult(match);
             matchRepository.updateResult(match);
+            lightweightDetailService.generate(match);
+            statisticsService.generate(match);
             processed.add(match);
         }
         return processed;
@@ -112,6 +122,8 @@ public class MatchDayService {
             eventGenerationService.generate(match);
             statisticsService.generate(match);
             if (playerMatchService != null) playerMatchService.process(match);
+            availabilityService.processMatch(match);
+            dynamicsService.processUnusedPlayers(match);
             processed.add(match);
         }
         return processed;

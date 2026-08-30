@@ -11,8 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class Day4IntegrationTest {
     @Test
     void shouldUsePlayersAndUpdateTheirSeasonState() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         Season season = new SeasonRepository().findFirst();
         new FootballWorldService().prepareSeason(season.getId());
         MatchRepository matches = new MatchRepository();

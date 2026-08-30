@@ -49,11 +49,31 @@ public class MatchReportService {
             throw new IllegalStateException("Match statistics are incomplete.");
         }
         List<MatchEvent> events = eventRepository.findByMatch(matchId);
+        Map<Long, Player> players = hydrateEventPlayers(events);
         return new MatchReport(match, events, home, away,
-                selectPlayerOfTheMatch(match, events));
+                selectPlayerOfTheMatch(match, events, players));
     }
 
-    private Player selectPlayerOfTheMatch(Match match, List<MatchEvent> events) {
+    private Map<Long, Player> hydrateEventPlayers(List<MatchEvent> events) {
+        if (events.isEmpty()) return Map.of();
+        Map<Long, Player> players = playerRepository.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Player::getId, player -> player));
+        for (MatchEvent event : events) {
+            event.setPlayer(required(players, event.getPlayer().getId()));
+            if (event.getSecondaryPlayer() != null) event.setSecondaryPlayer(
+                    required(players, event.getSecondaryPlayer().getId()));
+        }
+        return players;
+    }
+
+    private Player required(Map<Long, Player> players, long playerId) {
+        Player player = players.get(playerId);
+        if (player == null) throw new IllegalStateException("Match event player no longer exists.");
+        return player;
+    }
+
+    private Player selectPlayerOfTheMatch(Match match, List<MatchEvent> events,
+            Map<Long, Player> players) {
         Map<Long, Double> scores = new HashMap<>();
         for (MatchEvent event : events) {
             double primaryScore = switch (event.getType()) {
@@ -71,7 +91,7 @@ public class MatchReportService {
         if (!scores.isEmpty()) {
             long playerId = scores.entrySet().stream()
                     .max(Map.Entry.comparingByValue()).orElseThrow().getKey();
-            return playerRepository.findById(playerId);
+            return required(players, playerId);
         }
         return Stream.concat(
                 playerRepository.findCurrentPlayersByTeam(match.getHomeTeam().getId()).stream(),

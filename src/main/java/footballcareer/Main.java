@@ -3,8 +3,21 @@ package footballcareer;
 import footballcareer.database.*;
 import footballcareer.model.*;
 import footballcareer.service.*;
+import footballcareer.ui.ViewportPolicy;
+import footballcareer.ui.NavigationState;
+import footballcareer.ui.CareerShellView;
+import footballcareer.ui.CareerNavigationController;
+import footballcareer.ui.DashboardView;
+import footballcareer.ui.MarketSearchController;
+import footballcareer.ui.ResponsiveContainer;
+import footballcareer.ui.PlayerConversationView;
+import footballcareer.ui.TransferHistoryView;
+import footballcareer.ui.FeedbackAnimator;
+import footballcareer.ui.PlayerEvolutionView;
+import footballcareer.ui.LiveMatchPitchView;
+import footballcareer.ui.TransferContractFields;
+import footballcareer.ui.RetainedScreenStore;
 import javafx.application.Application;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
@@ -31,13 +44,46 @@ public class Main extends Application {
     private java.time.LocalDate selectedResultsDate;
     private java.time.YearMonth calendarMonth;
     private int selectedMarketTab;
+    private Long requestedLineupPlayerId;
+    private String squadSearchText = "";
+    private String squadPositionFilter = "TODAS";
+    private boolean marketGlobalMode;
+    private String marketSearchText = "";
+    private String marketLeagueFilter = "TODAS LAS LIGAS";
+    private String marketClubFilter = "TODOS LOS CLUBES";
+    private String marketPositionFilter = "TODAS";
+    private String marketMaximumPrice = "";
+    private String marketMinimumOverall = "";
+    private String marketMaximumAge = "";
+    private String marketMaximumSalary = "";
+    private String marketSort = "PRECIO ↑";
+    private boolean marketShortlistOnly;
     private javafx.animation.Animation activeAnimation;
+    private final NavigationState navigationState = new NavigationState();
+    private final CareerShellView careerShellView = new CareerShellView();
+    private final CareerNavigationController navigationController =
+            new CareerNavigationController();
+    private final DashboardView dashboardView = new DashboardView();
+    private final MarketSearchController marketSearchController =
+            new MarketSearchController();
+    private final ResponsiveContainer responsiveContainer = new ResponsiveContainer();
+    private final PlayerConversationView playerConversationView = new PlayerConversationView();
+    private final TransferHistoryView transferHistoryView = new TransferHistoryView();
+    private final RetainedScreenStore retainedScreens = new RetainedScreenStore();
+    private final FeedbackAnimator feedbackAnimator = new FeedbackAnimator();
 
     @Override
     public void start(Stage stage) {
-        stage.setTitle("Football Career");
-        stage.setMinWidth(900);
-        stage.setMinHeight(600);
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            AppDiagnostics.record(error, "uncaught:" + thread.getName());
+            javafx.application.Platform.runLater(() -> {
+                if (appScene != null) showMessage("ERROR INESPERADO",
+                        "El fallo se ha registrado en Diagnóstico. Puedes continuar y revisar el informe.");
+            });
+        });
+        stage.setTitle("FC//CAREER  —  Alpha 1.5");
+        stage.setMinWidth(800);
+        stage.setMinHeight(560);
         stage.setMaximized(true);
         stage.setFullScreenExitHint("");
         showLoading(stage, "PREPARANDO EL MUNDO", "Cargando clubes, jugadores y competiciones...");
@@ -81,10 +127,13 @@ public class Main extends Application {
     }
 
     private void showMainMenu(Stage stage) {
-        VBox brand = new VBox(8, label("CAREER MANAGEMENT SIMULATOR", "eyebrow"),
-                label("FOOTBALL\nCAREER", "hero-title"),
-                label("Construye una dinastía. Gestiona tu plantilla.\nDomina cada temporada.",
-                        "hero-subtitle"));
+        HBox version = new HBox(10, label("FC//CAREER", "menu-wordmark"),
+                label("ALPHA 1.5", "alpha-badge"));
+        version.setAlignment(Pos.CENTER_LEFT);
+        VBox brand = new VBox(14, version,
+                label("TU CLUB.\nTU HISTORIA.", "hero-title"),
+                label("Dirección deportiva, táctica y competición en una experiencia\n"
+                        + "de carrera construida decisión a decisión.", "hero-subtitle"));
         brand.setAlignment(Pos.CENTER_LEFT);
         VBox actions = new VBox(14);
         actions.setMaxWidth(330);
@@ -93,26 +142,97 @@ public class Main extends Application {
         Button loadCareer = wideButton("CARGAR CARRERA", "secondary-button");
         loadCareer.setDisable(careers.findAll().isEmpty());
         loadCareer.setOnAction(event -> showLoadCareer(stage));
-        actions.getChildren().addAll(newCareer, loadCareer,
-                label("ALPHA 0.8  •  JAVA 21", "muted-label"));
-        VBox menu = new VBox(28, brand, actions);
+        actions.getChildren().addAll(newCareer, loadCareer);
+        HBox featureStrip = new HBox(28,
+                menuFeature("MUNDO", "5 ligas conectadas"),
+                menuFeature("CARRERA", "Progreso persistente"),
+                menuFeature("PARTIDOS", "Simulación en directo"));
+        VBox menu = new VBox(36, brand, actions, featureStrip,
+                label("BUILD ALPHA 1.5  //  JAVA 21  //  LOCAL CAREER ENGINE", "menu-build"));
         menu.setAlignment(Pos.CENTER_LEFT);
         menu.setMaxWidth(760);
         menu.getStyleClass().add("menu-content");
         setScene(stage, scrollableCentered(menu, "menu-root"));
     }
 
+    private VBox menuFeature(String title, String detail) {
+        VBox feature = new VBox(4, label(title, "feature-title"),
+                label(detail, "muted-label"));
+        feature.getStyleClass().add("menu-feature");
+        return feature;
+    }
+
     private void showNewCareer(Stage stage) {
         VBox card = formCard("CREAR NUEVA CARRERA",
                 "Elige tu identidad y el club con el que empezarás.");
+        card.setPrefWidth(780);
+        card.setMaxWidth(900);
         TextField manager = new TextField();
         manager.setPromptText("Nombre del entrenador");
-        ComboBox<Team> club = new ComboBox<>();
-        club.getItems().addAll(careerService.getAvailableTeams());
-        club.setPromptText("Selecciona un club");
-        club.setCellFactory(list -> teamCell());
-        club.setButtonCell(teamCell());
-        club.setMaxWidth(Double.MAX_VALUE);
+        ComboBox<String> difficulty = new ComboBox<>();
+        difficulty.getItems().addAll("CASUAL", "NORMAL", "HARD", "LEGENDARY");
+        difficulty.setValue("NORMAL");
+        java.util.List<Team> availableTeams = careerService.getAvailableTeams();
+        java.util.Map<Long, String> leagueNames = new CompetitionTeamRepository()
+                .findLeagueNamesByTeam(initialSeason.getId());
+        ClubFinanceRepository financeRepository = new ClubFinanceRepository();
+        java.util.Map<Long, ClubFinance> teamFinances = availableTeams.stream().collect(
+                java.util.stream.Collectors.toMap(Team::getId,
+                        team -> financeRepository.findByTeam(team.getId())));
+        TextField clubSearch = new TextField();
+        clubSearch.setPromptText("Buscar club...");
+        ComboBox<String> country = new ComboBox<>();
+        country.getItems().add("TODOS LOS PAÍSES");
+        country.getItems().addAll(availableTeams.stream().map(Team::getCountry)
+                .distinct().sorted().toList());
+        country.setValue("TODOS LOS PAÍSES");
+        ListView<Team> club = new ListView<>();
+        club.setPrefHeight(250);
+        club.setCellFactory(list -> new ListCell<>() {
+            @Override protected void updateItem(Team team, boolean empty) {
+                super.updateItem(team, empty);
+                if (empty || team == null) setText(null);
+                else {
+                    ClubFinance finance = teamFinances.get(team.getId());
+                    setText(team.getShortName() + "  •  " + team.getName() + "  •  "
+                            + team.getCountry() + "  •  "
+                            + leagueNames.getOrDefault(team.getId(), "Sin liga")
+                            + "  •  REP " + team.getReputation()
+                            + (finance == null ? "" : String.format("  •  €%.1fM",
+                            finance.getTransferBudget() / 1_000_000)));
+                }
+            }
+        });
+        Runnable filterClubs = () -> {
+            String query = clubSearch.getText() == null ? ""
+                    : clubSearch.getText().trim().toLowerCase();
+            club.getItems().setAll(availableTeams.stream()
+                    .filter(team -> query.isEmpty()
+                            || team.getName().toLowerCase().contains(query)
+                            || team.getShortName().toLowerCase().contains(query))
+                    .filter(team -> "TODOS LOS PAÍSES".equals(country.getValue())
+                            || team.getCountry().equals(country.getValue()))
+                    .toList());
+        };
+        clubSearch.textProperty().addListener((observable, oldValue, newValue) -> filterClubs.run());
+        country.setOnAction(event -> filterClubs.run());
+        filterClubs.run();
+        Label clubDetails = label("Selecciona un club para consultar su proyecto.",
+                "comparison-label");
+        club.getSelectionModel().selectedItemProperty().addListener(
+                (observable, oldValue, selected) -> {
+                    if (selected == null) return;
+                    ClubFinance finance = teamFinances.get(selected.getId());
+                    clubDetails.setText(selected.getName() + "  •  "
+                            + leagueNames.getOrDefault(selected.getId(), selected.getCountry())
+                            + "  •  Estadio " + selected.getStadiumName()
+                            + " (" + selected.getStadiumCapacity() + ")"
+                            + "  •  Reputación " + selected.getReputation()
+                            + (finance == null ? "" : String.format(
+                            "  •  Presupuesto €%.1fM  •  Margen salarial €%.1fM",
+                            finance.getTransferBudget() / 1_000_000,
+                            finance.getAvailableWageBudget() / 1_000_000)));
+                });
         Label error = label("", "error-label");
         Button create = wideButton("COMENZAR CARRERA", "primary-button");
         create.setOnAction(event -> {
@@ -120,11 +240,11 @@ public class Main extends Application {
                 if (manager.getText() == null || manager.getText().isBlank()) {
                     throw new IllegalArgumentException("Introduce el nombre del entrenador.");
                 }
-                if (club.getValue() == null) {
+                if (club.getSelectionModel().getSelectedItem() == null) {
                     throw new IllegalArgumentException("Selecciona un club.");
                 }
                 String managerName = manager.getText().trim();
-                long teamId = club.getValue().getId();
+                long teamId = club.getSelectionModel().getSelectedItem().getId();
                 showLoading(stage, "CREANDO CARRERA", "Preparando calendario, plantilla y finanzas...");
                 runAsync(stage, () -> {
                     new FootballWorldService().prepareSeason(initialSeason.getId());
@@ -134,6 +254,13 @@ public class Main extends Application {
                             teamId, initialSeason.getId());
                 }, created -> {
                     career = created;
+                    CareerPreferencesRepository.Preferences defaults =
+                            CareerPreferencesRepository.Preferences.defaults();
+                    new CareerPreferencesRepository().save(created.getId(),
+                            new CareerPreferencesRepository.Preferences(defaults.stopAtMatch(),
+                                    defaults.stopOnOffer(), defaults.stopOnFatigue(),
+                                    defaults.assistanceLevel(), difficulty.getValue(),
+                                    defaults.managerIdentity()));
                     showDashboard(stage);
                 });
             } catch (IllegalArgumentException exception) {
@@ -142,7 +269,10 @@ public class Main extends Application {
         });
         Button back = wideButton("VOLVER", "ghost-button");
         back.setOnAction(event -> showMainMenu(stage));
-        card.getChildren().addAll(manager, club, error, create, back);
+        card.getChildren().addAll(manager,
+                new FlowPane(10, 10, label("DIFICULTAD", "objective-title"), difficulty),
+                new FlowPane(10, 10, clubSearch, country), club, clubDetails,
+                error, create, back);
         setScene(stage, scrollableCentered(card, "centered-root"));
     }
 
@@ -186,14 +316,37 @@ public class Main extends Application {
         delete.setOnAction(event -> {
             Career selected = saves.getSelectionModel().getSelectedItem();
             if (selected == null) return;
-            Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
-            confirmation.setTitle("Eliminar partida");
-            confirmation.setHeaderText("¿Eliminar la carrera de " + selected.getManagerName() + "?");
-            confirmation.setContentText("La carrera desaparecerá de la lista de partidas guardadas.");
-            confirmation.showAndWait().filter(ButtonType.OK::equals).ifPresent(result -> {
+            showDecision("ELIMINAR PARTIDA",
+                    "¿Eliminar la carrera de " + selected.getManagerName()
+                            + "? Esta acción borrará la partida guardada.", () -> {
                 careers.delete(selected.getId());
                 refreshSaves.run();
             });
+        });
+        Button duplicate = button("DUPLICAR PARTIDA", "secondary-button");
+        duplicate.setOnAction(event -> {
+            Career selected = saves.getSelectionModel().getSelectedItem();
+            if (selected == null) return;
+            showDecision("DUPLICAR PARTIDA",
+                    "Se copiará íntegramente el progreso de " + selected.getManagerName() + ".",
+                    () -> {
+                        careers.duplicate(selected.getId());
+                        refreshSaves.run();
+                        details.setText("Copia completa creada correctamente.");
+                    });
+        });
+        Button repair = button("VERIFICAR Y REPARAR", "ghost-button");
+        repair.setOnAction(event -> {
+            Career selected = saves.getSelectionModel().getSelectedItem();
+            if (selected == null) return;
+            try {
+                CareerRepairService.RepairReport report = new CareerRepairService()
+                        .repair(selected.getId());
+                details.setText(report.detail() + "  •  Fecha válida: " + report.date());
+                refreshSaves.run();
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                details.setText("No se pudo reparar: " + exception.getMessage());
+            }
         });
         Button load = wideButton("CARGAR PARTIDA", "primary-button");
         load.setOnAction(event -> {
@@ -213,72 +366,34 @@ public class Main extends Application {
         Button back = wideButton("VOLVER", "ghost-button");
         back.setOnAction(event -> showMainMenu(stage));
         card.getChildren().addAll(saves, details, renameValue,
-                new FlowPane(10, 10, rename, delete), load, back);
+                new FlowPane(10, 10, rename, duplicate, repair, delete), load, back);
         setScene(stage, scrollableCentered(card, "centered-root"));
     }
 
     private void showDashboard(Stage stage) {
         activeSection = "dashboard";
-        VBox content = page("CENTRO DE MANDO", career.getControlledTeam().getName()
-                + "  •  " + career.getCurrentSeason().getName());
-        FlowPane cards = new FlowPane(16, 16, statCard("FECHA", career.getCurrentDate().toString()),
-                statCard("REPUTACIÓN", String.valueOf(career.getControlledTeam().getReputation())),
-                financeCard(), statCard("POSICIÓN", leaguePositionSummary()));
-        cards.getChildren().forEach(node -> {
-            if (node instanceof Region region) region.setPrefWidth(210);
-        });
-        VBox nextMatch = panel("PRÓXIMO PARTIDO");
-        nextMatch.getStyleClass().add("featured-match");
+        ManagerReputationService.Reputation reputation = new ManagerReputationService()
+                .find(career);
+        ClubFinance finance = new ClubFinanceRepository()
+                .findByTeam(career.getControlledTeam().getId());
         Match next = findNextMatch();
-        if (next == null) {
-            nextMatch.getChildren().add(label("No hay encuentros próximos.", "empty-title"));
-        } else {
-            long daysAway = java.time.temporal.ChronoUnit.DAYS.between(
-                    career.getCurrentDate(), next.getDate());
-            VBox home = matchTeam(next.getHomeTeam(), next.getHomeTeam().getId()
-                    == career.getControlledTeam().getId());
-            VBox away = matchTeam(next.getAwayTeam(), next.getAwayTeam().getId()
-                    == career.getControlledTeam().getId());
-            VBox versus = new VBox(2, label("VS", "versus"),
-                    label(daysAway == 0 ? "HOY" : "EN " + daysAway + " DÍAS", "match-countdown"));
-            versus.setAlignment(Pos.CENTER);
-            HBox pairing = new HBox(24, home, versus, away);
-            pairing.setAlignment(Pos.CENTER);
-            HBox.setHgrow(home, Priority.ALWAYS);
-            HBox.setHgrow(away, Priority.ALWAYS);
-            Label metadata = label(next.getCompetition().getName() + "  •  " + next.getDate()
-                    + "  •  " + next.getHomeTeam().getStadiumName(), "match-metadata");
-            nextMatch.getChildren().addAll(pairing, metadata);
-        }
-        VBox activity = panel("ACTIVIDAD DEL DÍA");
-        java.util.Set<Long> competitionIds = currentCompetitions().stream()
-                .map(Competition::getId).collect(java.util.stream.Collectors.toSet());
-        var played = matches.findByDate(career.getCurrentDate()).stream()
-                .filter(Match::isPlayed)
-                .filter(match -> competitionIds.contains(match.getCompetition().getId()))
-                .toList();
-        if (played.isEmpty()) activity.getChildren().add(
-                label("No hay resultados registrados hoy.", "body-label"));
-        else played.forEach(match -> activity.getChildren().add(label(
-                match.getHomeTeam().getShortName() + "  " + match.getHomeGoals()
-                        + " — " + match.getAwayGoals() + "  "
-                        + match.getAwayTeam().getShortName(), "result-row")));
-        Button advance = button("AVANZAR UN DÍA", "primary-button");
         Match todayControlled = findControlledMatchToday();
-        advance.setDisable(todayControlled != null && !todayControlled.isPlayed());
-        advance.setOnAction(event -> advanceCareer(stage, 1));
-        Button advanceWeek = button("AVANZAR HASTA 7 DÍAS", "secondary-button");
-        advanceWeek.setDisable(todayControlled != null && !todayControlled.isPlayed());
-        advanceWeek.setOnAction(event -> {
+        CareerInsightService insights = new CareerInsightService();
+        DashboardView.Model model = new DashboardView.Model(
+                career.getControlledTeam().getName(), career.getCurrentSeason().getName(),
+                career.getCurrentDate(), reputation.display(), finance == null ? "—"
+                : String.format("€%.1fM", finance.getTransferBudget() / 1_000_000),
+                leaguePositionSummary(), next, career.getControlledTeam().getId(),
+                todayControlled != null && !todayControlled.isPlayed(), squadStatusSummary(),
+                recentFormData(), new CareerActivityService().recent(career, 10),
+                insights.news(career), insights.notifications(career), lastAdvanceSummary);
+        DashboardView.Actions actions = new DashboardView.Actions(
+                () -> advanceCareer(stage, 1), () -> {
             Match upcoming = findNextMatch();
             long untilMatch = upcoming == null ? 7 : java.time.temporal.ChronoUnit.DAYS.between(
                     career.getCurrentDate(), upcoming.getDate());
             advanceCareer(stage, Math.max(1, (int) Math.min(7, untilMatch)));
-        });
-        Button simulateNext = button(todayControlled != null && !todayControlled.isPlayed()
-                ? "SIMULAR PARTIDO" : "IR AL PRÓXIMO PARTIDO", "secondary-button");
-        simulateNext.setDisable(next == null && todayControlled == null);
-        simulateNext.setOnAction(event -> {
+        }, () -> {
             Match today = findControlledMatchToday();
             if (today != null && !today.isPlayed()) {
                 showMatchPreview(stage, today);
@@ -290,60 +405,11 @@ public class Main extends Application {
                         career.getCurrentDate(), upcoming.getDate());
                 if (days > 0) advanceCareer(stage, Math.toIntExact(days));
             }
-        });
-        VBox squadStatus = panel("ESTADO DE LA PLANTILLA");
-        squadStatus.getChildren().add(label(squadStatusSummary(), "body-label"));
-        VBox recentForm = panel("ÚLTIMOS PARTIDOS");
-        FlowPane formChips = recentFormChips();
-        recentForm.getChildren().add(formChips);
-        FlowPane actions = new FlowPane(12, 12, advance, advanceWeek, simulateNext);
-        HBox secondary = new HBox(16, squadStatus, recentForm);
-        HBox.setHgrow(squadStatus, Priority.ALWAYS);
-        HBox.setHgrow(recentForm, Priority.ALWAYS);
-        content.getChildren().addAll(cards, nextMatch, actions, secondary);
-        CareerInsightService insights = new CareerInsightService();
-        VBox objectives = panel("OBJETIVOS DE LA DIRECTIVA");
-        insights.objectives(career).forEach(objective -> {
-            Label status = label(switch (objective.status()) {
-                case ON_TRACK -> "EN OBJETIVO";
-                case AT_RISK -> "EN RIESGO";
-                case PENDING -> "PENDIENTE";
-            }, switch (objective.status()) {
-                case ON_TRACK -> "objective-good";
-                case AT_RISK -> "objective-risk";
-                case PENDING -> "objective-pending";
-            });
-            VBox copy = new VBox(3, label(objective.title(), "objective-title"),
-                    label(objective.detail(), "muted-label"));
-            HBox row = new HBox(14, status, copy);
-            row.setAlignment(Pos.CENTER_LEFT);
-            row.getStyleClass().add("objective-row");
-            objectives.getChildren().add(row);
-        });
-        VBox news = panel("NOTICIAS Y ALERTAS");
-        insights.news(career).forEach(item -> news.getChildren().add(
-                label("•  " + item, "news-row")));
-        HBox management = new HBox(16, objectives, news);
-        HBox.setHgrow(objectives, Priority.ALWAYS);
-        HBox.setHgrow(news, Priority.ALWAYS);
-        content.getChildren().add(management);
-        if (lastAdvanceSummary != null) {
-            VBox summary = panel("RESUMEN DEL AVANCE");
-            summary.getChildren().add(label(lastAdvanceSummary, "success-feedback"));
-            content.getChildren().add(summary);
-        }
-        content.getChildren().add(activity);
-        showCareerShell(stage, content);
+        }, () -> showNotifications(stage), item -> openNotification(stage, item.type()));
+        showCareerShell(stage, dashboardView.build(model, actions));
     }
 
-    private VBox matchTeam(Team team, boolean controlled) {
-        Label badge = label(team.getShortName(), controlled ? "team-badge-user" : "team-badge");
-        VBox box = new VBox(8, badge, label(team.getName(), "match-team-name"));
-        box.setAlignment(Pos.CENTER);
-        return box;
-    }
-
-    private FlowPane recentFormChips() {
+    private java.util.List<DashboardView.FormResult> recentFormData() {
         long teamId = career.getControlledTeam().getId();
         java.util.List<Match> recent = currentCompetitions().stream()
                 .flatMap(competition -> matches.findByCompetition(competition.getId()).stream())
@@ -351,23 +417,15 @@ public class Main extends Application {
                 .filter(match -> match.getHomeTeam().getId() == teamId
                         || match.getAwayTeam().getId() == teamId)
                 .sorted(Comparator.comparing(Match::getDate).reversed()).limit(5).toList();
-        FlowPane chips = new FlowPane(8, 8);
-        if (recent.isEmpty()) {
-            chips.getChildren().add(label("Aún no hay partidos disputados.", "muted-label"));
-            return chips;
-        }
-        recent.reversed().forEach(match -> {
+        return recent.reversed().stream().map(match -> {
             boolean home = match.getHomeTeam().getId() == teamId;
             int own = home ? match.getHomeGoals() : match.getAwayGoals();
             int rival = home ? match.getAwayGoals() : match.getHomeGoals();
-            Label chip = label(own > rival ? "V" : own == rival ? "E" : "D",
-                    own > rival ? "form-win" : own == rival ? "form-draw" : "form-loss");
-            Tooltip.install(chip, new Tooltip(match.getHomeTeam().getShortName() + " "
+            return new DashboardView.FormResult(own > rival ? "V" : own == rival ? "E" : "D",
+                    match.getHomeTeam().getShortName() + " "
                     + match.getHomeGoals() + "–" + match.getAwayGoals() + " "
-                    + match.getAwayTeam().getShortName()));
-            chips.getChildren().add(chip);
-        });
-        return chips;
+                    + match.getAwayTeam().getShortName());
+        }).toList();
     }
 
     private void advanceCareer(Stage stage, int days) {
@@ -375,14 +433,51 @@ public class Main extends Application {
         showLoading(stage, "SIMULANDO EL MUNDO",
                 days == 1 ? "Avanzando un día..." : "Avanzando hasta " + days + " días...");
         runAsync(stage, () -> {
-            careerService.advanceDaysForPlayer(career, days);
-            return career;
-        }, updated -> {
-            career = updated;
+            CareerPreferencesRepository.Preferences preferences =
+                    new CareerPreferencesRepository().find(career.getId());
+            int initialOffers = new TransferOfferRepository()
+                    .countPendingBySellingTeam(career.getControlledTeam().getId());
+            String stopReason = null;
+            int advanced = 0;
+            for (int index = 0; index < days; index++) {
+                careerService.advanceDayForPlayer(career);
+                advanced++;
+                if (preferences.stopAtMatch() && findControlledMatchToday() != null) {
+                    stopReason = "partido del equipo";
+                    break;
+                }
+                int offers = new TransferOfferRepository()
+                        .countPendingBySellingTeam(career.getControlledTeam().getId());
+                if (preferences.stopOnOffer() && offers > initialOffers) {
+                    stopReason = "nueva oferta recibida";
+                    break;
+                }
+                if (preferences.stopOnFatigue() && tiredPlayerCount() >= 4) {
+                    stopReason = "alerta de fatiga";
+                    break;
+                }
+            }
+            return new AdvanceOutcome(career, advanced, stopReason);
+        }, outcome -> {
+            career = outcome.career();
             lastAdvanceSummary = "Del " + from + " al " + career.getCurrentDate()
-                    + ". La partida se ha guardado automáticamente.";
+                    + "  •  " + outcome.daysAdvanced() + " día(s) avanzados. "
+                    + (outcome.stopReason() == null ? "Periodo completado."
+                    : "Avance detenido por " + outcome.stopReason() + ".")
+                    + " La partida se ha guardado automáticamente.";
             showDashboard(stage);
         });
+    }
+
+    private record AdvanceOutcome(Career career, int daysAdvanced, String stopReason) {}
+
+    private long tiredPlayerCount() {
+        java.util.Map<Long, PlayerState> states = new PlayerStateRepository().findAll();
+        return new PlayerRepository().findCurrentPlayersByTeam(
+                career.getControlledTeam().getId()).stream()
+                .map(player -> states.get(player.getId()))
+                .filter(java.util.Objects::nonNull)
+                .filter(state -> state.getFitness() < 70).count();
     }
 
     private String leaguePositionSummary() {
@@ -401,8 +496,9 @@ public class Main extends Application {
         java.util.List<Player> squad = new PlayerRepository()
                 .findCurrentPlayersByTeam(career.getControlledTeam().getId());
         PlayerStateRepository repository = new PlayerStateRepository();
+        java.util.Map<Long, PlayerState> allStates = repository.findAll();
         java.util.List<PlayerState> states = squad.stream().map(player ->
-                repository.findByPlayer(player.getId())).filter(java.util.Objects::nonNull).toList();
+                allStates.get(player.getId())).filter(java.util.Objects::nonNull).toList();
         if (states.isEmpty()) return "No hay información de estado disponible.";
         double fitness = states.stream().mapToInt(PlayerState::getFitness).average().orElse(0);
         double morale = states.stream().mapToInt(PlayerState::getMorale).average().orElse(0);
@@ -418,13 +514,15 @@ public class Main extends Application {
         java.util.List<Player> squad = new PlayerRepository()
                 .findCurrentPlayersByTeam(career.getControlledTeam().getId());
         PlayerStateRepository states = new PlayerStateRepository();
+        java.util.Map<Long, PlayerState> allStates = states.findAll();
         java.util.Map<Long, PlayerState> playerStates = new java.util.HashMap<>();
-        squad.forEach(player -> playerStates.put(player.getId(), states.findByPlayer(player.getId())));
+        squad.forEach(player -> playerStates.put(player.getId(), allStates.get(player.getId())));
         TextField search = new TextField();
         search.setPromptText("Buscar jugador...");
+        search.setText(squadSearchText);
         ComboBox<String> position = new ComboBox<>();
         position.getItems().addAll("TODAS", "GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST");
-        position.setValue("TODAS");
+        position.setValue(squadPositionFilter);
         TableView<Player> table = new TableView<>();
         table.getStyleClass().add("squad-table");
         addPlayerColumn(table, "POS", 65, player -> player.getPosition());
@@ -434,9 +532,14 @@ public class Main extends Application {
         addPlayerColumn(table, "FORMA", 75, player -> playerStates.get(player.getId()).getForm());
         addPlayerColumn(table, "MORAL", 75, player -> playerStates.get(player.getId()).getMorale());
         addPlayerColumn(table, "FITNESS", 80, player -> playerStates.get(player.getId()).getFitness());
+        addPlayerColumn(table, "ESTADO", 120, player -> availabilityLabel(
+                playerStates.get(player.getId()), career.getCurrentDate()));
+        addPlayerColumn(table, "ROL", 105, player -> squadRole(player, squad));
         addPlayerColumn(table, "VALOR", 105, player -> String.format("€%.1fM",
                 player.getMarketValue() / 1_000_000));
         Runnable filter = () -> {
+            squadSearchText = search.getText() == null ? "" : search.getText();
+            squadPositionFilter = position.getValue();
             String query = search.getText() == null ? "" : search.getText().trim().toLowerCase();
             String selectedPosition = position.getValue();
             table.getItems().setAll(squad.stream()
@@ -444,7 +547,15 @@ public class Main extends Application {
                             || player.getFullName().toLowerCase().contains(query))
                     .filter(player -> "TODAS".equals(selectedPosition)
                             || player.getPosition().name().equals(selectedPosition)).toList());
+            Long remembered = navigationState.selection("squad");
+            if (remembered != null) table.getItems().stream()
+                    .filter(player -> player.getId() == remembered).findFirst()
+                    .ifPresent(player -> table.getSelectionModel().select(player));
         };
+        table.getSelectionModel().selectedItemProperty().addListener(
+                (observable, previous, selected) -> {
+                    if (selected != null) navigationState.rememberSelection("squad", selected.getId());
+                });
         search.textProperty().addListener((observable, oldValue, newValue) -> filter.run());
         position.setOnAction(event -> filter.run());
         filter.run();
@@ -455,6 +566,9 @@ public class Main extends Application {
             Player selected = table.getSelectionModel().getSelectedItem();
             if (selected != null) showPlayer(stage, selected, "squad");
         });
+        Button compare = button("COMPARAR JUGADORES", "secondary-button");
+        compare.setOnAction(event -> showPlayerComparison(squad, playerStates,
+                table.getSelectionModel().getSelectedItem()));
         table.setRowFactory(view -> {
             TableRow<Player> row = new TableRow<>();
             row.setOnMouseClicked(event -> {
@@ -464,8 +578,90 @@ public class Main extends Application {
             return row;
         });
         FlowPane filters = new FlowPane(12, 12, search, position);
-        content.getChildren().addAll(filters, table, details);
+        content.getChildren().addAll(filters, table, new FlowPane(10, 10, details, compare));
         showCareerShell(stage, content);
+    }
+
+    private void showPlayerComparison(java.util.List<Player> squad,
+            java.util.Map<Long, PlayerState> states, Player initiallySelected) {
+        ComboBox<Player> first = new ComboBox<>();
+        ComboBox<Player> second = new ComboBox<>();
+        first.getItems().addAll(squad);
+        second.getItems().addAll(squad);
+        first.setConverter(playerStringConverter());
+        second.setConverter(playerStringConverter());
+        first.setValue(initiallySelected == null ? squad.getFirst() : initiallySelected);
+        second.setValue(squad.stream().filter(player -> player != first.getValue()).findFirst()
+                .orElse(squad.getFirst()));
+        GridPane comparison = new GridPane();
+        comparison.getStyleClass().add("attributes-grid");
+        comparison.setHgap(22);
+        comparison.setVgap(10);
+        Runnable refresh = () -> {
+            comparison.getChildren().clear();
+            Player left = first.getValue();
+            Player right = second.getValue();
+            if (left == null || right == null) return;
+            String[] labels = {"MEDIA", "POTENCIAL", "RITMO", "TIRO", "PASE",
+                    "REGATE", "DEFENSA", "FÍSICO", "FORMA", "FITNESS", "VALOR €M"};
+            double[] leftValues = comparisonValues(left, states.get(left.getId()));
+            double[] rightValues = comparisonValues(right, states.get(right.getId()));
+            for (int row = 0; row < labels.length; row++) {
+                Label leftValue = label(formatComparisonValue(leftValues[row], row),
+                        leftValues[row] >= rightValues[row] ? "success-feedback" : "body-label");
+                Label rightValue = label(formatComparisonValue(rightValues[row], row),
+                        rightValues[row] >= leftValues[row] ? "success-feedback" : "body-label");
+                comparison.add(leftValue, 0, row);
+                comparison.add(label(labels[row], "muted-label"), 1, row);
+                comparison.add(rightValue, 2, row);
+            }
+        };
+        first.setOnAction(event -> refresh.run());
+        second.setOnAction(event -> refresh.run());
+        refresh.run();
+        Button close = button("CERRAR", "ghost-button");
+        VBox dialog = new VBox(14, label("COMPARADOR DE PLANTILLA", "form-title"),
+                new HBox(12, first, second), comparison, close);
+        dialog.getStyleClass().add("in-app-dialog");
+        dialog.setPrefWidth(620);
+        Runnable dismiss = showOverlay(dialog);
+        close.setOnAction(event -> dismiss.run());
+    }
+
+    private javafx.util.StringConverter<Player> playerStringConverter() {
+        return new javafx.util.StringConverter<>() {
+            @Override public String toString(Player player) {
+                return player == null ? "" : player.getPosition() + "  •  "
+                        + player.getFullName() + "  •  " + player.getOverall();
+            }
+            @Override public Player fromString(String text) { return null; }
+        };
+    }
+
+    private double[] comparisonValues(Player player, PlayerState state) {
+        return new double[] {player.getOverall(), player.getPotential(), player.getPace(),
+                player.getShooting(), player.getPassing(), player.getDribbling(),
+                player.getDefending(), player.getPhysical(), state == null ? 0 : state.getForm(),
+                state == null ? 0 : state.getFitness(), player.getMarketValue() / 1_000_000};
+    }
+
+    private String formatComparisonValue(double value, int row) {
+        return row == 10 ? String.format("%.1f", value) : String.valueOf((int) value);
+    }
+
+    private String squadRole(Player player, java.util.List<Player> squad) {
+        long stronger = squad.stream().filter(other -> other.getOverall() > player.getOverall()).count();
+        if (stronger < 5) return "CLAVE";
+        if (stronger < 11) return "TITULAR";
+        if (stronger < 18) return "ROTACIÓN";
+        return "PROMESA";
+    }
+
+    private String availabilityLabel(PlayerState state, java.time.LocalDate date) {
+        if (state == null || state.isAvailableOn(date)) return "DISPONIBLE";
+        String reason = "SUSPENSION".equals(state.getUnavailableReason())
+                ? "SANCIONADO" : "LESIONADO";
+        return reason + " HASTA " + state.getUnavailableUntil();
     }
 
     private <T> void addPlayerColumn(TableView<Player> table, String title, double width,
@@ -477,83 +673,161 @@ public class Main extends Application {
         table.getColumns().add(column);
     }
 
-    private void showPlaceholder(Stage stage, String title) {
-        VBox content = page(title, "La pantalla se conectará en el siguiente bloque del día 8.");
-        VBox construction = panel("EN CONSTRUCCIÓN");
-        construction.getChildren().add(label(
-                "La lógica ya existe y está probada. Ahora estamos construyendo su presentación.",
-                "body-label"));
-        content.getChildren().add(construction);
+    private void showCareerShell(Stage stage, Node content) {
+        String area = navigationController.areaFor(activeSection);
+        int notificationCount = new CareerInsightService().notifications(career).size();
+        int incomingOffers = new TransferOfferRepository()
+                .countPendingBySellingTeam(career.getControlledTeam().getId());
+        java.util.List<CareerShellView.NavigationItem> mainItems = java.util.List.of(
+                navItem("CENTRAL", "central".equals(area), () -> showDashboard(stage)),
+                navItem("PLANTILLA", "squad".equals(area), () -> showSquad(stage)),
+                navItem("TRASPASOS" + (incomingOffers == 0 ? "" : "  //  " + incomingOffers),
+                        "transfers".equals(area), () -> {
+                            selectedMarketTab = 0; showMarket(stage);
+                        }),
+                navItem("OFICINA", "office".equals(area), () -> showOffice(stage)),
+                navItem("PERSONALIZAR", "customize".equals(area), () -> showSettings(stage)));
+        BorderPane shell = careerShellView.build(career, notificationCount, mainItems,
+                subNavigationItems(stage, area), () -> showNotifications(stage), () -> {
+            showDecision("GUARDAR Y SALIR",
+                    "¿Volver al menú principal? El progreso actual ya está guardado.", () -> {
+                career = null;
+                activeSection = "dashboard";
+                navigationState.clear();
+                showMainMenu(stage);
+            });
+        }, content, activeSection, navigationState);
+        setScene(stage, shell);
+    }
+
+    private CareerShellView.NavigationItem navItem(String text, boolean selected,
+            Runnable action) {
+        return new CareerShellView.NavigationItem(text, selected, action);
+    }
+
+    private java.util.List<CareerShellView.NavigationItem> subNavigationItems(
+            Stage stage, String area) {
+        java.util.List<CareerShellView.NavigationItem> navigation = new java.util.ArrayList<>();
+        if ("central".equals(area)) {
+            navigation.add(subNav("CENTRAL", "dashboard", () -> showDashboard(stage)));
+            navigation.add(subNav("CALENDARIO", "calendar", () -> showCalendar(stage)));
+            navigation.add(subNav("CLASIFICACIÓN", "standings", () -> showStandings(stage)));
+            navigation.add(subNav("RESULTADOS", "results", () -> showResults(stage)));
+            navigation.add(subNav("BANDEJA", "notifications", () -> showNotifications(stage)));
+        } else if ("squad".equals(area)) {
+            navigation.add(subNav("JUGADORES", "squad", () -> showSquad(stage)));
+            navigation.add(subNav("ALINEACIÓN", "lineup", () -> showLineup(stage)));
+            navigation.add(subNav("ENTRENAMIENTO", "training", () -> showTraining(stage)));
+            navigation.add(subNav("CENTRO MÉDICO", "medical", () -> showMedical(stage)));
+        } else if ("transfers".equals(area)) {
+            navigation.add(subNav("MERCADO", "market", () -> {
+                selectedMarketTab = 0; showMarket(stage);
+            }));
+            navigation.add(subNav("VENTAS", "sales", () -> {
+                selectedMarketTab = 1; showMarket(stage);
+            }));
+            navigation.add(subNav("OFERTAS", "offers", () -> {
+                selectedMarketTab = 2; showMarket(stage);
+            }));
+            int incoming = new TransferOfferRepository()
+                    .countPendingBySellingTeam(career.getControlledTeam().getId());
+            navigation.add(subNav("RECIBIDAS" + (incoming == 0 ? "" : "  (" + incoming + ")"),
+                    "incoming", () -> {
+                selectedMarketTab = 3; showMarket(stage);
+            }));
+            navigation.add(subNav("HISTORIAL", "history", () -> showTransferHistory(stage)));
+        } else if ("office".equals(area)) {
+            navigation.add(subNav("VISIÓN GENERAL", "office", () -> showOffice(stage)));
+        } else {
+            navigation.add(subNav("AJUSTES", "settings", () -> showSettings(stage)));
+        }
+        return java.util.List.copyOf(navigation);
+    }
+
+    private CareerShellView.NavigationItem subNav(String text, String section, Runnable action) {
+        return navItem(text, navigationController.isSelected(
+                section, activeSection, selectedMarketTab), action);
+    }
+
+    private void showNotifications(Stage stage) {
+        activeSection = "notifications";
+        CareerInsightService service = new CareerInsightService();
+        java.util.List<CareerInsightService.Notification> items = service.notifications(career);
+        VBox content = page("BANDEJA", "Asuntos que requieren tu atención como manager");
+        FlowPane summary = new FlowPane(14, 14,
+                statCard("PENDIENTES", String.valueOf(items.size())),
+                statCard("URGENTES", String.valueOf(items.stream()
+                        .filter(CareerInsightService.Notification::urgent).count())));
+        summary.getChildren().forEach(node -> {
+            if (node instanceof Region region) region.setPrefWidth(210);
+        });
+        VBox inbox = panel("CENTRO DE NOTIFICACIONES");
+        if (items.isEmpty()) {
+            inbox.getChildren().addAll(label("TODO AL DÍA", "empty-title"),
+                    label("No tienes partidos inminentes, ofertas ni tareas pendientes.",
+                            "muted-label"));
+        } else {
+            items.forEach(item -> inbox.getChildren().add(notificationRow(stage, item, false)));
+        }
+        content.getChildren().addAll(summary, inbox);
         showCareerShell(stage, content);
     }
 
-    private void showCareerShell(Stage stage, Node content) {
-        VBox sidebar = new VBox(10);
-        sidebar.getStyleClass().add("sidebar");
-        sidebar.setPrefWidth(250);
-        HBox brand = new HBox(12, label("FC", "sidebar-logo"),
-                new VBox(2, label("FOOTBALL", "sidebar-brand"),
-                        label("CAREER", "sidebar-brand-accent")));
-        brand.setAlignment(Pos.CENTER_LEFT);
-        VBox clubIdentity = new VBox(4,
-                label(career.getControlledTeam().getShortName(), "club-code"),
-                label(career.getControlledTeam().getName(), "club-name"),
-                label("Mánager  •  " + career.getManagerName(), "muted-label"));
-        clubIdentity.getStyleClass().add("club-identity");
-        Label navigationTitle = label("NAVEGACIÓN", "nav-section-title");
-        Button dashboard = navButton("Dashboard", "dashboard");
-        dashboard.setOnAction(event -> showDashboard(stage));
-        Button squad = navButton("Plantilla", "squad");
-        squad.setOnAction(event -> showSquad(stage));
-        Button lineup = navButton("Alineación", "lineup");
-        lineup.setOnAction(event -> showLineup(stage));
-        Button training = navButton("Entrenamiento", "training");
-        training.setOnAction(event -> showTraining(stage));
-        Button calendar = navButton("Calendario", "calendar");
-        calendar.setOnAction(event -> showCalendar(stage));
-        Button standings = navButton("Clasificación", "standings");
-        standings.setOnAction(event -> showStandings(stage));
-        Button results = navButton("Resultados", "results");
-        results.setOnAction(event -> showResults(stage));
-        Button market = navButton("Mercado", "market");
-        market.setOnAction(event -> showMarket(stage));
-        Button history = navButton("Historial", "history");
-        history.setOnAction(event -> showTransferHistory(stage));
-        Button settings = navButton("Ajustes", "settings");
-        settings.setOnAction(event -> showSettings(stage));
-        Region spacer = new Region();
-        VBox.setVgrow(spacer, Priority.ALWAYS);
-        Button menu = navButton("Guardar y salir", "menu");
-        menu.setOnAction(event -> {
-            Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
-            confirmation.setTitle("Guardar y salir");
-            confirmation.setHeaderText("¿Volver al menú principal?");
-            confirmation.setContentText("El progreso actual ya está guardado.");
-            confirmation.showAndWait().filter(ButtonType.OK::equals).ifPresent(result -> {
-                career = null;
-                activeSection = "dashboard";
-                showMainMenu(stage);
-            });
-        });
-        VBox footer = new VBox(3, label("TEMPORADA " + career.getCurrentSeason().getName(),
-                "sidebar-season"), label(career.getCurrentDate().toString(), "sidebar-date"));
-        footer.getStyleClass().add("sidebar-footer");
-        sidebar.getChildren().addAll(brand, clubIdentity, navigationTitle,
-                dashboard, squad, lineup, training, calendar, standings, results,
-                market, history, settings, spacer, footer, menu);
-        BorderPane shell = new BorderPane();
-        shell.getStyleClass().add("app-shell");
-        shell.setLeft(sidebar);
-        Node center = content;
-        if (!(content instanceof ScrollPane)) {
-            ScrollPane scroll = new ScrollPane(content);
-            scroll.setFitToWidth(true);
-            scroll.setFitToHeight(true);
-            scroll.setPannable(true);
-            center = scroll;
+    private HBox notificationRow(Stage stage, CareerInsightService.Notification item,
+            boolean compact) {
+        Label type = label(switch (item.type()) {
+            case MATCH -> "PARTIDO";
+            case TRANSFER -> "TRASPASO";
+            case FITNESS -> "FÍSICO";
+            case TRAINING -> "ENTRENO";
+            case MEDICAL -> "MÉDICO";
+            case PLAYER -> "JUGADOR";
+            case BOARD -> "DIRECTIVA";
+        }, item.urgent() ? "notification-type-urgent" : "notification-type");
+        VBox copy = new VBox(3, label(item.title(), "notification-title"),
+                label(item.detail(), "muted-label"));
+        HBox.setHgrow(copy, Priority.ALWAYS);
+        Button action = button(notificationActionText(item.type()), "ghost-button");
+        action.setOnAction(event -> openNotification(stage, item.type()));
+        HBox row = new HBox(12, type, copy, action);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("notification-row");
+        if (compact) row.getStyleClass().add("notification-row-compact");
+        return row;
+    }
+
+    private String notificationActionText(CareerInsightService.NotificationType type) {
+        return switch (type) {
+            case MATCH -> "PREPARAR";
+            case TRANSFER -> "RESPONDER";
+            case FITNESS -> "GESTIONAR";
+            case TRAINING -> "PLANIFICAR";
+            case MEDICAL -> "REVISAR";
+            case PLAYER -> "GESTIONAR";
+            case BOARD -> "REVISAR";
+        };
+    }
+
+    private void openNotification(Stage stage, CareerInsightService.NotificationType type) {
+        switch (type) {
+            case TRANSFER -> {
+                selectedMarketTab = 2;
+                showMarket(stage);
+            }
+            case FITNESS, TRAINING -> showTraining(stage);
+            case MEDICAL -> showMedical(stage);
+            case PLAYER -> showSquad(stage);
+            case BOARD -> showOffice(stage);
+            case MATCH -> {
+                Match next = findNextMatch();
+                if (next != null && next.getDate().equals(career.getCurrentDate())) {
+                    showMatchPreview(stage, next);
+                } else {
+                    calendarMonth = java.time.YearMonth.from(career.getCurrentDate());
+                    showCalendar(stage);
+                }
+            }
         }
-        shell.setCenter(center);
-        setScene(stage, shell);
     }
 
     private void showCalendar(Stage stage) {
@@ -595,7 +869,7 @@ public class Main extends Application {
         Runnable[] refresh = new Runnable[1];
         refresh[0] = () -> {
             monthTitle.setText(calendarMonth.getMonth().getDisplayName(
-                    java.time.format.TextStyle.FULL, new java.util.Locale("es", "ES")).toUpperCase()
+                    java.time.format.TextStyle.FULL, java.util.Locale.of("es", "ES")).toUpperCase()
                     + "  " + calendarMonth.getYear());
             java.util.List<Match> visible = allFixtures.stream()
                     .filter(match -> "TODAS LAS COMPETICIONES".equals(competitionFilter.getValue())
@@ -712,6 +986,7 @@ public class Main extends Application {
 
     private void showStandings(Stage stage) {
         activeSection = "standings";
+        if (restoreRetainedScreen(stage, "standings")) return;
         VBox content = page("CLASIFICACIÓN", "Tabla de la competición");
         ComboBox<Competition> selector = new ComboBox<>();
         selector.getItems().addAll(currentCompetitions());
@@ -734,23 +1009,45 @@ public class Main extends Application {
         addStandingColumn(table, "GC", 55, LeagueStanding::getGoalsAgainst);
         addStandingColumn(table, "DG", 60, LeagueStanding::getGoalDifference);
         addStandingColumn(table, "PTS", 65, LeagueStanding::getPoints);
+        java.util.Map<Long, String> recentForm = new java.util.HashMap<>();
+        addStandingColumn(table, "ÚLTIMOS 5", 115,
+                row -> recentForm.getOrDefault(row.getTeam().getId(), "—"));
         table.getColumns().addFirst(positionColumn);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setRowFactory(view -> new TableRow<>() {
             @Override protected void updateItem(LeagueStanding item, boolean empty) {
                 super.updateItem(item, empty);
-                getStyleClass().remove("controlled-team-row");
+                getStyleClass().removeAll("controlled-team-row", "zone-champion",
+                        "zone-champions", "zone-europa", "zone-relegation");
+                if (empty || item == null) return;
+                int position = getIndex();
+                int total = table.getItems().size();
+                if (position == 0) getStyleClass().add("zone-champion");
+                else if (position < Math.min(4, total)) getStyleClass().add("zone-champions");
+                else if (position == 4 && total > 5) getStyleClass().add("zone-europa");
+                else if (position >= Math.max(0, total - 3))
+                    getStyleClass().add("zone-relegation");
                 if (!empty && item != null && item.getTeam().getId()
                         == career.getControlledTeam().getId()) {
                     getStyleClass().add("controlled-team-row");
                 }
             }
         });
+        table.setOnMouseClicked(event -> {
+            LeagueStanding selected = table.getSelectionModel().getSelectedItem();
+            if (event.getClickCount() == 2 && selected != null)
+                showTeamOverview(stage, selected.getTeam());
+        });
         Runnable refresh = () -> {
             table.getItems().clear();
+            recentForm.clear();
             Competition selected = selector.getValue();
             if (selected == null) return;
             selectedCompetitionId = selected.getId();
+            java.util.List<Match> competitionMatches = matches.findByCompetition(selected.getId());
+            new CompetitionTeamRepository().findTeamsByCompetition(selected.getId())
+                    .forEach(team -> recentForm.put(team.getId(),
+                            teamRecentForm(team.getId(), competitionMatches)));
             table.getItems().setAll(new LeagueStandingRepository()
                     .findByCompetition(selected.getId()));
         };
@@ -764,7 +1061,55 @@ public class Main extends Application {
             refresh.run();
         }
         VBox.setVgrow(table, Priority.ALWAYS);
-        content.getChildren().addAll(selector, table);
+        HBox legend = new HBox(14,
+                label("■ CAMPEÓN", "legend-champion"),
+                label("■ CHAMPIONS", "legend-champions"),
+                label("■ EUROPA", "legend-europa"),
+                label("■ DESCENSO", "legend-relegation"));
+        content.getChildren().addAll(selector, legend, table,
+                label("Desempates: puntos, diferencia de goles, goles a favor y nombre del club. "
+                        + "Doble clic para abrir la ficha del equipo.", "muted-label"));
+        retainedScreens.put("standings", career.getCurrentDate(), content);
+        showCareerShell(stage, content);
+    }
+
+    private String teamRecentForm(long teamId, java.util.List<Match> competitionMatches) {
+        java.util.List<Match> recent = competitionMatches.stream().filter(Match::isPlayed)
+                .filter(match -> match.getHomeTeam().getId() == teamId
+                        || match.getAwayTeam().getId() == teamId)
+                .sorted(Comparator.comparing(Match::getDate).reversed()).limit(5).toList();
+        if (recent.isEmpty()) return "—";
+        return recent.reversed().stream().map(match -> {
+            boolean home = match.getHomeTeam().getId() == teamId;
+            int own = home ? match.getHomeGoals() : match.getAwayGoals();
+            int rival = home ? match.getAwayGoals() : match.getHomeGoals();
+            return own > rival ? "V" : own == rival ? "E" : "D";
+        }).collect(java.util.stream.Collectors.joining("  "));
+    }
+
+    private void showTeamOverview(Stage stage, Team team) {
+        activeSection = "standings";
+        VBox content = page(team.getName(), team.getCountry() + "  •  " + team.getShortName());
+        java.util.List<Player> squad = new PlayerRepository().findCurrentPlayersByTeam(team.getId());
+        double average = squad.stream().mapToInt(Player::getOverall).average().orElse(0);
+        ClubFinance finance = new ClubFinanceRepository().findByTeam(team.getId());
+        FlowPane cards = new FlowPane(14, 14,
+                statCard("REPUTACIÓN", String.valueOf(team.getReputation())),
+                statCard("GRL PLANTILLA", String.format("%.1f", average)),
+                statCard("JUGADORES", String.valueOf(squad.size())),
+                statCard("PRESUPUESTO", finance == null ? "—"
+                        : String.format("€%.1fM", finance.getTransferBudget() / 1_000_000)));
+        VBox identity = panel("IDENTIDAD DEL CLUB");
+        identity.getChildren().add(label("Estadio: " + team.getStadiumName() + "  •  Capacidad: "
+                + team.getStadiumCapacity(), "body-label"));
+        VBox keyPlayers = panel("JUGADORES DESTACADOS");
+        squad.stream().sorted(Comparator.comparingInt(Player::getOverall).reversed()).limit(5)
+                .forEach(player -> keyPlayers.getChildren().add(label(player.getPosition()
+                        + "  •  " + player.getFullName() + "  •  GRL " + player.getOverall(),
+                        "news-row")));
+        Button back = button("VOLVER A CLASIFICACIÓN", "ghost-button");
+        back.setOnAction(event -> showStandings(stage));
+        content.getChildren().addAll(cards, identity, keyPlayers, back);
         showCareerShell(stage, content);
     }
 
@@ -779,10 +1124,33 @@ public class Main extends Application {
 
     private void showResults(Stage stage) {
         activeSection = "results";
+        if (restoreRetainedScreen(stage, "results")) return;
         VBox content = page("RESULTADOS DEL MUNDO",
                 "Consulta cualquier fecha y filtra por competición");
-        ListView<String> resultList = new ListView<>();
-        resultList.getStyleClass().add("data-list");
+        TableView<Match> resultTable = new TableView<>();
+        addMatchColumn(resultTable, "COMPETICIÓN", 250,
+                match -> match.getCompetition().getName());
+        addMatchColumn(resultTable, "LOCAL", 220, match -> match.getHomeTeam().getName());
+        addMatchColumn(resultTable, "MARCADOR", 110,
+                match -> match.getHomeGoals() + " — " + match.getAwayGoals());
+        addMatchColumn(resultTable, "VISITANTE", 220,
+                match -> match.getAwayTeam().getName());
+        resultTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        resultTable.setPlaceholder(label("No hay resultados registrados con estos filtros.",
+                "muted-label"));
+        resultTable.setRowFactory(view -> new TableRow<>() {
+            @Override protected void updateItem(Match item, boolean empty) {
+                super.updateItem(item, empty);
+                getStyleClass().remove("controlled-team-row");
+                if (!empty && item != null && isControlledMatch(item))
+                    getStyleClass().add("controlled-team-row");
+            }
+        });
+        resultTable.setOnMouseClicked(event -> {
+            Match selected = resultTable.getSelectionModel().getSelectedItem();
+            if (event.getClickCount() == 2 && selected != null)
+                showMatchReport(stage, selected);
+        });
         DatePicker date = new DatePicker(selectedResultsDate == null
                 ? career.getCurrentDate() : selectedResultsDate);
         date.setMaxWidth(180);
@@ -802,29 +1170,19 @@ public class Main extends Application {
             competition.setValue(previousSelection != null
                     && competition.getItems().contains(previousSelection)
                     ? previousSelection : "TODAS LAS COMPETICIONES");
-            resultList.getItems().setAll(dayMatches.stream()
+            resultTable.getItems().setAll(dayMatches.stream()
                     .filter(match -> "TODAS LAS COMPETICIONES".equals(competition.getValue())
                             || match.getCompetition().getName().equals(competition.getValue()))
-                    .map(match -> match.getCompetition().getName() + "  •  "
-                            + match.getHomeTeam().getShortName() + "  "
-                            + match.getHomeGoals() + " — " + match.getAwayGoals()
-                            + "  " + match.getAwayTeam().getShortName()).toList());
-            if (resultList.getItems().isEmpty()) resultList.getItems().add(
-                    "No hay resultados registrados con estos filtros.");
+                    .toList());
         };
         date.setOnAction(event -> refresh.run());
         competition.setOnAction(event -> {
             if (date.getValue() == null) return;
-            resultList.getItems().setAll(matches.findByDate(date.getValue()).stream()
+            resultTable.getItems().setAll(matches.findByDate(date.getValue()).stream()
                     .filter(Match::isPlayed)
                     .filter(match -> "TODAS LAS COMPETICIONES".equals(competition.getValue())
                             || match.getCompetition().getName().equals(competition.getValue()))
-                    .map(match -> match.getCompetition().getName() + "  •  "
-                            + match.getHomeTeam().getShortName() + "  " + match.getHomeGoals()
-                            + " — " + match.getAwayGoals() + "  "
-                            + match.getAwayTeam().getShortName()).toList());
-            if (resultList.getItems().isEmpty()) resultList.getItems().add(
-                    "No hay resultados registrados con estos filtros.");
+                    .toList());
         });
         Button previous = button("← DÍA ANTERIOR", "ghost-button");
         previous.setOnAction(event -> { date.setValue(date.getValue().minusDays(1)); refresh.run(); });
@@ -836,18 +1194,30 @@ public class Main extends Application {
             refresh.run();
         });
         refresh.run();
-        VBox.setVgrow(resultList, Priority.ALWAYS);
+        VBox.setVgrow(resultTable, Priority.ALWAYS);
         content.getChildren().addAll(new FlowPane(12, 12, previous, date, next, competition),
-                resultList);
+                label("Doble clic sobre un partido para abrir su informe.", "muted-label"),
+                resultTable);
+        retainedScreens.put("results", career.getCurrentDate(), content);
         showCareerShell(stage, content);
     }
 
+    private <T> void addMatchColumn(TableView<Match> table, String title, double width,
+            java.util.function.Function<Match, T> value) {
+        TableColumn<Match, T> column = new TableColumn<>(title);
+        column.setPrefWidth(width);
+        column.setCellValueFactory(cell -> new javafx.beans.property.ReadOnlyObjectWrapper<>(
+                value.apply(cell.getValue())));
+        table.getColumns().add(column);
+    }
+
     private void showMatchReport(Stage stage, Match selectedMatch) {
+        String origin = navigationController.reportReturnSection(activeSection);
         MatchReport report;
         try {
             report = new MatchReportService().build(selectedMatch.getId());
         } catch (IllegalArgumentException | IllegalStateException exception) {
-            showCalendar(stage);
+            navigateToSection(stage, origin);
             return;
         }
         Match match = report.getMatch();
@@ -877,16 +1247,23 @@ public class Main extends Application {
                 report.getAwayStats().getYellowCards());
         addStatRow(statistics, 6, "Rojas", report.getHomeStats().getRedCards(),
                 report.getAwayStats().getRedCards());
+        addStatRow(statistics, 7, "Goles esperados (xG)",
+                String.format("%.2f", report.getHomeStats().getExpectedGoals()),
+                String.format("%.2f", report.getAwayStats().getExpectedGoals()));
+        addStatRow(statistics, 8, "Pases", report.getHomeStats().getPasses(),
+                report.getAwayStats().getPasses());
+        addStatRow(statistics, 9, "Precisión de pase",
+                report.getHomeStats().getPassAccuracy() + "%",
+                report.getAwayStats().getPassAccuracy() + "%");
+        addStatRow(statistics, 10, "Entradas", report.getHomeStats().getTackles(),
+                report.getAwayStats().getTackles());
 
         VBox timeline = panel("CRONOLOGÍA");
-        PlayerRepository playerRepository = new PlayerRepository();
         report.getEvents().forEach(event -> {
-            Player mainPlayer = playerRepository.findById(event.getPlayer().getId());
             String detail = event.getMinute() + "'  " + eventLabel(event.getType()) + "  •  "
-                    + mainPlayer.getFullName();
+                    + event.getPlayer().getFullName();
             if (event.getSecondaryPlayer() != null) {
-                Player second = playerRepository.findById(event.getSecondaryPlayer().getId());
-                detail += "  (" + second.getFullName() + ")";
+                detail += "  (" + event.getSecondaryPlayer().getFullName() + ")";
             }
             timeline.getChildren().add(label(detail, "event-row"));
         });
@@ -903,17 +1280,40 @@ public class Main extends Application {
             impact.getChildren().addAll(label(matchOutcomeSummary(match), "match-highlight"),
                     label("Clasificación: " + leaguePositionSummary()
                             + "  •  " + squadStatusSummary(), "body-label"));
+            java.util.Map<Long, PlayerState> states = new PlayerStateRepository().findAll();
+            java.util.List<String> absences = new PlayerRepository()
+                    .findCurrentPlayersByTeam(career.getControlledTeam().getId()).stream()
+                    .filter(player -> {
+                        PlayerState state = states.get(player.getId());
+                        return state != null && !state.isAvailableOn(career.getCurrentDate());
+                    }).map(player -> player.getFullName() + "  •  "
+                            + availabilityLabel(states.get(player.getId()), career.getCurrentDate()))
+                    .toList();
+            if (absences.isEmpty()) impact.getChildren().add(
+                    label("Sin bajas médicas o disciplinarias.", "success-feedback"));
+            else absences.forEach(absence -> impact.getChildren().add(
+                    label(absence, "warning-feedback")));
         } else {
             impact.getChildren().add(label(
                     "Este encuentro no afecta directamente a tu plantilla.", "muted-label"));
         }
-        Button back = button("VOLVER AL CALENDARIO", "ghost-button");
-        back.setOnAction(event -> showCalendar(stage));
+        Button back = button("VOLVER A " + navigationController.sectionLabel(origin),
+                "ghost-button");
+        back.setOnAction(event -> navigateToSection(stage, origin));
         Button dashboard = button("IR AL CENTRO DE MANDO", "secondary-button");
         dashboard.setOnAction(event -> showDashboard(stage));
         content.getChildren().addAll(score, statistics, bestPlayer, impact, timeline,
                 new FlowPane(12, 12, dashboard, back));
         showCareerShell(stage, new ScrollPane(content));
+    }
+
+    private void navigateToSection(Stage stage, String section) {
+        switch (section) {
+            case "results" -> showResults(stage);
+            case "dashboard" -> showDashboard(stage);
+            case "standings" -> showStandings(stage);
+            default -> showCalendar(stage);
+        }
     }
 
     private String matchOutcomeSummary(Match match) {
@@ -936,12 +1336,15 @@ public class Main extends Application {
 
     private void showMarket(Stage stage) {
         activeSection = "market";
+        new TransferOfferService().expireOffers(career.getCurrentDate());
+        boolean windowOpen = new TransferWindowService().isOpen(career.getCurrentDate());
         ClubFinance finance = new ClubFinanceRepository()
                 .findByTeam(career.getControlledTeam().getId());
         String budget = finance == null ? "Sin datos financieros"
                 : String.format("Presupuesto: €%.1fM  •  Margen salarial: €%.1fM",
                 finance.getTransferBudget() / 1_000_000,
-                finance.getAvailableWageBudget() / 1_000_000);
+                finance.getAvailableWageBudget() / 1_000_000)
+                + (windowOpen ? "  •  VENTANA ABIERTA" : "  •  VENTANA CERRADA");
         VBox content = page("MERCADO DE FICHAJES", budget);
         PlayerMarketRepository marketRepository = new PlayerMarketRepository();
         new ClubTransferAiService().ensureMarketSupply(career.getControlledTeam().getId());
@@ -951,6 +1354,7 @@ public class Main extends Application {
         tabs.getTabs().addAll(
                 new Tab("COMPRAR", createBuyTab(stage, marketRepository)),
                 new Tab("MIS VENTAS", createSalesTab(marketRepository)),
+                new Tab("OFERTAS ENVIADAS", createSentOffersTab(stage)),
                 new Tab("OFERTAS RECIBIDAS", createIncomingOffersTab(stage)));
         tabs.getTabs().forEach(tab -> tab.setClosable(false));
         tabs.getSelectionModel().select(Math.min(selectedMarketTab, tabs.getTabs().size() - 1));
@@ -965,78 +1369,105 @@ public class Main extends Application {
         VBox box = panel("BUSCAR Y NEGOCIAR");
         java.util.List<Player> marketPlayers = marketRepository
                 .findTransferListed(career.getControlledTeam().getId());
-        java.util.Map<Long, Double> marketPrices = new java.util.HashMap<>();
+        java.util.List<Player> allPlayers = new PlayerRepository().findAll();
+        java.util.Map<Long, Double> marketPrices = marketRepository.findAllAskingPrices();
         java.util.Map<Long, Team> marketTeams = new java.util.HashMap<>();
         CareerShortlistRepository shortlistRepository = new CareerShortlistRepository();
         java.util.Set<Long> shortlistIds = new java.util.HashSet<>(
                 shortlistRepository.findPlayerIds(career.getId()));
         PlayerTeamRepository playerTeams = new PlayerTeamRepository();
-        marketPlayers.forEach(player -> marketPrices.put(player.getId(),
-                marketRepository.findAskingPrice(player.getId())));
-        marketPlayers.forEach(player -> {
-            Long teamId = playerTeams.findCurrentTeamId(player.getId());
-            if (teamId != null) marketTeams.put(player.getId(), teams.findById(teamId));
+        java.util.Map<Long, Long> currentTeamIds = playerTeams.findAllCurrentTeamIds();
+        java.util.Map<Long, Team> teamsById = teams.findAll().stream().collect(
+                java.util.stream.Collectors.toMap(Team::getId, team -> team));
+        allPlayers.forEach(player -> {
+            Long teamId = currentTeamIds.get(player.getId());
+            if (teamId != null && teamsById.containsKey(teamId)) {
+                marketTeams.put(player.getId(), teamsById.get(teamId));
+            }
         });
+        java.util.Map<Long, String> leagueByTeam = new CompetitionTeamRepository()
+                .findLeagueNamesByTeam(career.getCurrentSeason().getId());
+        MarketSearchController.Catalogue catalogueData =
+                new MarketSearchController.Catalogue(allPlayers, marketPlayers, marketTeams,
+                        leagueByTeam, marketPrices, shortlistIds,
+                        career.getControlledTeam().getId(), career.getCurrentDate());
         ListView<Player> targets = marketPlayerList(marketPrices, marketTeams, shortlistIds);
+        ToggleButton listedMode = new ToggleButton("EN EL MERCADO  //  " + marketPlayers.size());
+        ToggleButton globalMode = new ToggleButton("SCOUTING GLOBAL");
+        listedMode.getStyleClass().add("market-mode-button");
+        globalMode.getStyleClass().add("market-mode-button");
+        ToggleGroup marketMode = new ToggleGroup();
+        listedMode.setToggleGroup(marketMode);
+        globalMode.setToggleGroup(marketMode);
+        (marketGlobalMode ? globalMode : listedMode).setSelected(true);
         TextField search = new TextField();
-        search.setPromptText("Buscar jugador...");
+        search.setPromptText("Nombre del jugador...");
+        search.setText(marketSearchText);
+        ComboBox<String> league = new ComboBox<>();
+        league.getItems().add("TODAS LAS LIGAS");
+        league.getItems().addAll(leagueByTeam.values().stream().distinct().sorted().toList());
+        league.setValue(league.getItems().contains(marketLeagueFilter)
+                ? marketLeagueFilter : "TODAS LAS LIGAS");
+        ComboBox<String> club = new ComboBox<>();
+        club.getItems().add("TODOS LOS CLUBES");
+        club.getItems().addAll(teamsById.values().stream()
+                .filter(team -> team.getId() != career.getControlledTeam().getId())
+                .map(Team::getName).sorted().toList());
+        club.setValue(club.getItems().contains(marketClubFilter)
+                ? marketClubFilter : "TODOS LOS CLUBES");
         ComboBox<String> position = new ComboBox<>();
         position.getItems().addAll("TODAS", "GK", "DEFENSA", "MEDIO", "ATAQUE");
-        position.setValue("TODAS");
+        position.setValue(marketPositionFilter);
         TextField maximumPrice = new TextField();
         maximumPrice.setPromptText("Precio máximo (€M)");
+        maximumPrice.setText(marketMaximumPrice);
         TextField minimumOverall = new TextField();
         minimumOverall.setPromptText("GRL mínimo");
+        minimumOverall.setText(marketMinimumOverall);
         TextField maximumAge = new TextField();
         maximumAge.setPromptText("Edad máxima");
+        maximumAge.setText(marketMaximumAge);
         TextField maximumSalary = new TextField();
         maximumSalary.setPromptText("Salario máximo (€M)");
+        maximumSalary.setText(marketMaximumSalary);
         ComboBox<String> sort = new ComboBox<>();
         sort.getItems().addAll("PRECIO ↑", "PRECIO ↓", "GRL ↓", "EDAD ↑");
-        sort.setValue("PRECIO ↑");
+        sort.setValue(marketSort);
         CheckBox shortlistOnly = new CheckBox("Solo seguimiento");
-        Label comparison = label("Selecciona un jugador para compararlo con tu plantilla.",
-                "comparison-label");
+        shortlistOnly.setSelected(marketShortlistOnly);
+        Label resultCount = label("", "market-result-count");
         Runnable refreshTargets = () -> {
-            String query = search.getText() == null ? "" : search.getText().trim().toLowerCase();
-            double maximum;
-            try {
-                maximum = maximumPrice.getText() == null || maximumPrice.getText().isBlank()
-                        ? Double.MAX_VALUE
-                        : Double.parseDouble(maximumPrice.getText().replace(',', '.')) * 1_000_000;
-            } catch (NumberFormatException exception) {
-                maximum = Double.MAX_VALUE;
-            }
-            int overallLimit = parseOptionalInteger(minimumOverall.getText(), 0);
-            int ageLimit = parseOptionalInteger(maximumAge.getText(), Integer.MAX_VALUE);
-            double salaryLimit = parseOptionalMillions(maximumSalary.getText(), Double.MAX_VALUE);
-            final double priceLimit = maximum;
-            Comparator<Player> comparator = switch (sort.getValue()) {
-                case "PRECIO ↓" -> Comparator.comparingDouble(
-                        (Player player) -> marketPrices.get(player.getId())).reversed();
-                case "GRL ↓" -> Comparator.comparingInt(Player::getOverall).reversed();
-                case "EDAD ↑" -> Comparator.comparingInt(
-                        player -> player.getAge(career.getCurrentDate()));
-                default -> Comparator.comparingDouble(
-                        player -> marketPrices.get(player.getId()));
-            };
-            targets.getItems().setAll(marketPlayers.stream()
-                    .filter(player -> query.isEmpty()
-                            || player.getFullName().toLowerCase().contains(query)
-                            || (marketTeams.get(player.getId()) != null
-                            && marketTeams.get(player.getId()).getName().toLowerCase().contains(query)))
-                    .filter(player -> matchesPositionGroup(player, position.getValue()))
-                    .filter(player -> !shortlistOnly.isSelected()
-                            || shortlistIds.contains(player.getId()))
-                    .filter(player -> player.getOverall() >= overallLimit)
-                    .filter(player -> player.getAge(career.getCurrentDate()) <= ageLimit)
-                    .filter(player -> player.getSalary() <= salaryLimit)
-                    .filter(player -> {
-                        Double price = marketPrices.get(player.getId());
-                        return price != null && price <= priceLimit;
-                    }).sorted(comparator).toList());
+            marketGlobalMode = globalMode.isSelected();
+            marketSearchText = search.getText() == null ? "" : search.getText();
+            marketLeagueFilter = league.getValue();
+            marketClubFilter = club.getValue();
+            marketPositionFilter = position.getValue();
+            marketMaximumPrice = maximumPrice.getText() == null ? "" : maximumPrice.getText();
+            marketMinimumOverall = minimumOverall.getText() == null ? "" : minimumOverall.getText();
+            marketMaximumAge = maximumAge.getText() == null ? "" : maximumAge.getText();
+            marketMaximumSalary = maximumSalary.getText() == null ? "" : maximumSalary.getText();
+            marketSort = sort.getValue();
+            marketShortlistOnly = shortlistOnly.isSelected();
+            MarketSearchController.Query query = new MarketSearchController.Query(
+                    globalMode.isSelected(), search.getText(), league.getValue(), club.getValue(),
+                    position.getValue(), minimumOverall.getText(), maximumAge.getText(),
+                    maximumPrice.getText(), maximumSalary.getText(), sort.getValue(),
+                    shortlistOnly.isSelected());
+            java.util.List<Player> filtered = marketSearchController.search(catalogueData, query);
+            targets.getItems().setAll(filtered);
+            Long remembered = navigationState.selection("market");
+            if (remembered != null) filtered.stream()
+                    .filter(player -> player.getId() == remembered).findFirst()
+                    .ifPresent(player -> targets.getSelectionModel().select(player));
+            resultCount.setText(filtered.size() + " JUGADORES ENCONTRADOS");
         };
         search.textProperty().addListener((observable, oldValue, newValue) -> refreshTargets.run());
+        marketMode.selectedToggleProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue == null) listedMode.setSelected(true);
+            refreshTargets.run();
+        });
+        league.setOnAction(event -> refreshTargets.run());
+        club.setOnAction(event -> refreshTargets.run());
         maximumPrice.textProperty().addListener((observable, oldValue, newValue) -> refreshTargets.run());
         minimumOverall.textProperty().addListener((observable, oldValue, newValue) -> refreshTargets.run());
         maximumAge.textProperty().addListener((observable, oldValue, newValue) -> refreshTargets.run());
@@ -1044,16 +1475,24 @@ public class Main extends Application {
         position.setOnAction(event -> refreshTargets.run());
         sort.setOnAction(event -> refreshTargets.run());
         shortlistOnly.setOnAction(event -> refreshTargets.run());
+        Button applySearch = button("BUSCAR / APLICAR", "primary-button");
+        applySearch.setOnAction(event -> refreshTargets.run());
+        Button clearSearch = button("LIMPIAR", "ghost-button");
+        clearSearch.setOnAction(event -> {
+            search.clear();
+            league.setValue("TODAS LAS LIGAS");
+            club.setValue("TODOS LOS CLUBES");
+            position.setValue("TODAS");
+            minimumOverall.clear();
+            maximumAge.clear();
+            maximumPrice.clear();
+            maximumSalary.clear();
+            shortlistOnly.setSelected(false);
+            refreshTargets.run();
+        });
         refreshTargets.run();
-        TextField offerAmount = new TextField();
-        offerAmount.setPromptText("Oferta en millones de euros");
-        Label feedback = label("Selecciona un jugador y plantea una oferta.", "muted-label");
-        TransferOffer[] counterOffer = {null};
-        Button acceptCounter = button("ACEPTAR CONTRAOFERTA", "secondary-button");
-        acceptCounter.setVisible(false);
-        acceptCounter.setManaged(false);
-        Button buy = button("REALIZAR OFERTA", "primary-button");
         Button details = button("VER FICHA", "ghost-button");
+        details.setDisable(true);
         Button shortlist = button("AÑADIR A SEGUIMIENTO", "secondary-button");
         shortlist.setDisable(true);
         shortlist.setOnAction(event -> {
@@ -1075,100 +1514,393 @@ public class Main extends Application {
         targets.setOnMouseClicked(event -> {
             Player selected = targets.getSelectionModel().getSelectedItem();
             if (event.getClickCount() == 2 && selected != null) {
-                showPlayer(stage, selected, "market");
+                showTransferNegotiation(stage, selected);
             }
         });
         targets.getSelectionModel().selectedItemProperty().addListener(
                 (observable, oldValue, selected) -> {
-                    comparison.setText(selected == null
-                            ? "Selecciona un jugador para compararlo con tu plantilla."
-                            : marketComparison(selected));
+                    if (selected != null) navigationState.rememberSelection("market", selected.getId());
                     shortlist.setDisable(selected == null);
+                    details.setDisable(selected == null);
                     shortlist.setText(selected != null && shortlistIds.contains(selected.getId())
                             ? "QUITAR DE SEGUIMIENTO" : "AÑADIR A SEGUIMIENTO");
                 });
-        buy.setOnAction(event -> {
-            Player target = targets.getSelectionModel().getSelectedItem();
-            try {
-                if (target == null) throw new IllegalArgumentException("Selecciona un jugador.");
-                double amount = Double.parseDouble(offerAmount.getText().replace(',', '.'))
-                        * 1_000_000;
-                TransferOfferService service = new TransferOfferService();
-                TransferOffer offer = service.evaluate(service.makeOffer(target.getId(),
-                        career.getControlledTeam().getId(), amount,
-                        career.getCurrentDate()).getId());
-                if (offer.getStatus() == footballcareer.model.enums.TransferOfferStatus.ACCEPTED) {
-                    executeTransfer(offer, target);
-                    feedback.setText("Fichaje completado: " + target.getFullName());
-                    animateFeedback(feedback, true);
-                    refreshMarketAfter(stage);
-                } else if (offer.getCounterAmount() != null) {
-                    counterOffer[0] = offer;
-                    feedback.setText(String.format("Contraoferta: €%.1fM",
-                            offer.getCounterAmount() / 1_000_000));
-                    acceptCounter.setManaged(true);
-                    acceptCounter.setVisible(true);
-                    animateFeedback(feedback, false);
-                } else {
-                    feedback.setText("Oferta rechazada: está demasiado lejos del precio.");
-                    animateFeedback(feedback, false);
-                }
-            } catch (NumberFormatException exception) {
-                feedback.setText("Introduce una cantidad válida.");
-                animateFeedback(feedback, false);
-            } catch (IllegalArgumentException | IllegalStateException exception) {
-                feedback.setText(exception.getMessage());
-                animateFeedback(feedback, false);
-            }
-        });
-        acceptCounter.setOnAction(event -> {
-            try {
-                TransferOffer accepted = new TransferOfferService()
-                        .acceptCounterOffer(counterOffer[0].getId());
-                executeTransfer(accepted,
-                        new PlayerRepository().findById(accepted.getPlayer().getId()));
-                feedback.setText("Contraoferta aceptada. Fichaje completado.");
-                animateFeedback(feedback, true);
-                refreshMarketAfter(stage);
-            } catch (IllegalArgumentException | IllegalStateException exception) {
-                feedback.setText(exception.getMessage());
-                animateFeedback(feedback, false);
-            }
-        });
-        FlowPane actions = new FlowPane(10, 10, buy, acceptCounter, details, shortlist);
         VBox.setVgrow(targets, Priority.ALWAYS);
-        box.getChildren().addAll(new FlowPane(10, 10, search, position, maximumPrice,
-                        minimumOverall, maximumAge, maximumSalary, sort, shortlistOnly),
-                targets, comparison, offerAmount, actions, feedback);
+        Button negotiate = button("NEGOCIAR CON EL SELECCIONADO", "primary-button");
+        negotiate.setDisable(true);
+        negotiate.setOnAction(event -> {
+            Player selected = targets.getSelectionModel().getSelectedItem();
+            if (selected != null) showTransferNegotiation(stage, selected);
+        });
+        targets.getSelectionModel().selectedItemProperty().addListener(
+                (observable, oldValue, selected) -> negotiate.setDisable(selected == null));
+        FlowPane modes = new FlowPane(8, 8, listedMode, globalMode,
+                negotiate, details, shortlist);
+        FlowPane coreFilters = new FlowPane(10, 10, search, league, club, position,
+                applySearch, clearSearch, resultCount);
+        FlowPane advancedContent = new FlowPane(10, 10, minimumOverall, maximumAge,
+                maximumPrice, maximumSalary, sort, shortlistOnly);
+        TitledPane advanced = new TitledPane("FILTROS AVANZADOS", advancedContent);
+        advanced.setExpanded(false);
+        VBox catalogue = panel("CATÁLOGO DE JUGADORES");
+        catalogue.getChildren().addAll(modes, coreFilters, advanced, targets,
+                label("Doble clic sobre un jugador para abrir la negociación.", "muted-label"));
+        targets.setMinHeight(220);
+        targets.setPrefHeight(430);
+        catalogue.setMinHeight(360);
+        VBox.setVgrow(catalogue, Priority.ALWAYS);
+        box.getChildren().add(catalogue);
         return box;
     }
 
-    private int parseOptionalInteger(String value, int fallback) {
+    private void showTransferNegotiation(Stage stage, Player player) {
+        TransferOfferService service = new TransferOfferService();
+        TransferOfferService.NegotiationQuote quote = service.quote(player.getId());
+        Long sellerId = new PlayerTeamRepository().findCurrentTeamId(player.getId());
+        Team seller = sellerId == null ? null : teams.findById(sellerId);
+        ClubFinance finances = new ClubFinanceRepository()
+                .findByTeam(career.getControlledTeam().getId());
+        String assistance = new CareerPreferencesRepository().find(career.getId())
+                .assistanceLevel();
+
+        Button send = button("ENVIAR OFERTA", "primary-button");
+        Button loan = button("SOLICITAR CESIÓN", "secondary-button");
+        Button cancel = button("CANCELAR", "ghost-button");
+        TextField amount = new TextField();
+        amount.setPromptText("Cantidad en millones de euros");
+        amount.setText(String.format(java.util.Locale.ROOT, "%.1f",
+                ("EXPERT".equals(assistance) ? quote.marketValue() : quote.requiredAmount())
+                        / 1_000_000));
+        TextField salary = new TextField(String.format(java.util.Locale.ROOT, "%.2f",
+                player.getSalary() / 1_000_000));
+        salary.setPromptText("Salario anual en millones");
+        TextField signingBonus = new TextField("0.50");
+        signingBonus.setPromptText("Prima de fichaje (€M)");
+        TextField releaseClause = new TextField(String.format(java.util.Locale.ROOT, "%.1f",
+                Math.max(quote.requiredAmount(), quote.marketValue() * 1.5) / 1_000_000));
+        releaseClause.setPromptText("Cláusula de rescisión (€M)");
+        ComboBox<Integer> upfront = new ComboBox<>();
+        upfront.getItems().addAll(50, 75, 100); upfront.setValue(100);
+        upfront.setPromptText("Pago inicial %");
+        TextField appearanceBonus = new TextField("0");
+        appearanceBonus.setPromptText("Prima tras 10 partidos (€M)");
+        ComboBox<String> squadRole = new ComboBox<>();
+        squadRole.getItems().addAll("CRUCIAL", "IMPORTANT", "ROTATION", "PROSPECT");
+        squadRole.setValue(player.getOverall() >= 82 ? "CRUCIAL"
+                : player.getOverall() >= 76 ? "IMPORTANT" : "ROTATION");
+        ComboBox<Integer> contractYears = new ComboBox<>();
+        contractYears.getItems().addAll(1, 2, 3, 4, 5);
+        contractYears.setValue(3);
+        ComboBox<Integer> loanMonths = new ComboBox<>();
+        loanMonths.getItems().addAll(6, 12);
+        loanMonths.setValue(6);
+        loanMonths.setPromptText("Duración de cesión");
+        Label loanReference = label("", "comparison-label");
+        Runnable refreshLoanQuote = () -> {
+            LoanService.LoanQuote loanQuote = new LoanService()
+                    .quote(player.getId(), loanMonths.getValue());
+            loanReference.setText(String.format(
+                    "CESIÓN %d MESES  •  Tarifa solicitada €%.2fM",
+                    loanQuote.months(), loanQuote.requiredFee() / 1_000_000));
+            loan.setDisable(!new TransferWindowService().isOpen(career.getCurrentDate())
+                    || finances == null
+                    || finances.getTransferBudget() < loanQuote.requiredFee());
+        };
+        loanMonths.setOnAction(event -> refreshLoanQuote.run());
+        refreshLoanQuote.run();
+        Label offerStatus = label("", "warning-feedback");
+        Label financialProjection = label("", "comparison-label");
+        Label negotiationReference = label("GUIDED".equals(assistance)
+                ? String.format("Referencia negociadora del club: €%.1fM",
+                quote.requiredAmount() / 1_000_000)
+                : "STANDARD".equals(assistance)
+                ? "El club espera una oferta coherente con valor, nivel y disponibilidad."
+                : "Sin referencia negociadora: evalúa el riesgo con tus propios criterios.",
+                "warning-feedback");
+        Label squadComparison = label("EXPERT".equals(assistance)
+                ? "Asistencia experta: comparación automática desactivada."
+                : marketComparison(player), "muted-label");
+        VBox content = new VBox(14,
+                label("NEGOCIAR FICHAJE", "form-title"),
+                label(player.getFullName() + "  •  " + player.getPosition()
+                        + "  •  GRL " + player.getOverall(), "match-highlight"),
+                label(seller == null ? "Club desconocido" : seller.getName(), "objective-title"),
+                label(String.format("Valor de mercado €%.1fM  •  %s",
+                        quote.marketValue() / 1_000_000,
+                        quote.transferListed() ? "JUGADOR EN VENTA" : "NO ESTÁ EN VENTA"),
+                        "comparison-label"),
+                label(quote.stance() + "  •  " + quote.explanation(), "warning-feedback"),
+                negotiationReference,
+                label(finances == null ? "Presupuesto no disponible"
+                        : String.format("Tu presupuesto: €%.1fM",
+                        finances.getTransferBudget() / 1_000_000), "body-label"),
+                squadComparison,
+                label("TU OFERTA (€M)", "objective-title"), amount,
+                label("CONTRATO", "objective-title"),
+                new TransferContractFields().build(salary, contractYears, signingBonus,
+                        releaseClause, squadRole, upfront, appearanceBonus),
+                label("El fichaje queda sujeto a reconocimiento médico.", "muted-label"),
+                financialProjection, offerStatus,
+                label("ALTERNATIVA: CESIÓN", "objective-title"),
+                new FlowPane(10, 10, loanMonths, loan), loanReference,
+                new FlowPane(10, 10, send, cancel));
+        content.setPrefWidth(520);
+        content.getStyleClass().add("in-app-dialog");
+        Node sendButton = send;
+        boolean windowOpen = new TransferWindowService().isOpen(career.getCurrentDate());
+        Runnable validateOffer = () -> {
+            try {
+                double value = Double.parseDouble(amount.getText().replace(',', '.'))
+                        * 1_000_000;
+                double wage = Double.parseDouble(salary.getText().replace(',', '.'))
+                        * 1_000_000;
+                double bonus = Double.parseDouble(signingBonus.getText().replace(',', '.'))
+                        * 1_000_000;
+                double clause = Double.parseDouble(releaseClause.getText().replace(',', '.'))
+                        * 1_000_000;
+                double variable = Double.parseDouble(appearanceBonus.getText().replace(',', '.'))
+                        * 1_000_000;
+                boolean affordable = finances != null
+                        && value + bonus + variable <= finances.getTransferBudget();
+                boolean wageAffordable = finances != null && wage > 0
+                        && wage <= finances.getAvailableWageBudget();
+                if (finances != null) financialProjection.setText(String.format(
+                        "COMPROMETIDO €%.1fM  •  PAGO INICIAL %d%%  •  VARIABLE €%.1fM  •  MARGEN SALARIAL €%.2fM  •  PRIMA €%.1fM",
+                        (value + bonus + variable) / 1_000_000, upfront.getValue(), variable / 1_000_000,
+                        (finances.getAvailableWageBudget() - wage) / 1_000_000,
+                        bonus / 1_000_000));
+                sendButton.setDisable(!windowOpen || value <= 0 || bonus < 0
+                        || variable < 0
+                        || clause < value || !affordable
+                        || !wageAffordable);
+                if (!windowOpen) offerStatus.setText("La ventana de fichajes está cerrada.");
+                else if (value <= 0) offerStatus.setText("La oferta debe ser mayor que cero.");
+                else if (bonus < 0) offerStatus.setText("La prima no puede ser negativa.");
+                else if (variable < 0) offerStatus.setText("La variable no puede ser negativa.");
+                else if (clause < value) offerStatus.setText(
+                        "La cláusula no puede ser inferior al precio del fichaje.");
+                else if (!affordable) offerStatus.setText("La oferta supera tu presupuesto disponible.");
+                else if (!wageAffordable) offerStatus.setText(
+                        "El salario supera tu margen salarial disponible.");
+                else if ("EXPERT".equals(assistance))
+                    offerStatus.setText("Oferta válida. No se mostrarán pistas de aceptación.");
+                else if (value < quote.requiredAmount() * 0.80)
+                    offerStatus.setText("Oferta muy baja: el rechazo es prácticamente seguro.");
+                else if (value < quote.requiredAmount())
+                    offerStatus.setText("Zona negociable: el club podría enviar una contraoferta.");
+                else offerStatus.setText("Oferta fuerte: cumple la referencia del vendedor.");
+            } catch (NumberFormatException exception) {
+                sendButton.setDisable(true);
+                offerStatus.setText("Introduce una cantidad numérica válida.");
+            }
+        };
+        amount.textProperty().addListener((observable, oldValue, newValue) -> validateOffer.run());
+        salary.textProperty().addListener((observable, oldValue, newValue) -> validateOffer.run());
+        signingBonus.textProperty().addListener(
+                (observable, oldValue, newValue) -> validateOffer.run());
+        releaseClause.textProperty().addListener(
+                (observable, oldValue, newValue) -> validateOffer.run());
+        appearanceBonus.textProperty().addListener(
+                (observable, oldValue, newValue) -> validateOffer.run());
+        upfront.setOnAction(event -> validateOffer.run());
+        validateOffer.run();
+        Runnable close = showOverlay(content);
+        cancel.setOnAction(event -> close.run());
+        send.setOnAction(event -> {
+            double value;
+            double wage;
+            double bonus;
+            double clause;
+            double variable;
+            try {
+                value = Double.parseDouble(amount.getText().replace(',', '.')) * 1_000_000;
+                wage = Double.parseDouble(salary.getText().replace(',', '.')) * 1_000_000;
+                bonus = Double.parseDouble(signingBonus.getText().replace(',', '.')) * 1_000_000;
+                clause = Double.parseDouble(releaseClause.getText().replace(',', '.')) * 1_000_000;
+                variable = Double.parseDouble(appearanceBonus.getText().replace(',', '.')) * 1_000_000;
+            } catch (NumberFormatException exception) {
+                value = -1;
+                wage = -1;
+                bonus = -1;
+                clause = -1;
+                variable = -1;
+            }
+            close.run();
+            processTransferNegotiation(stage, player, value, wage, contractYears.getValue(),
+                    bonus, clause, squadRole.getValue(), upfront.getValue(), variable);
+        });
+        loan.setOnAction(event -> {
+            LoanService.LoanQuote loanQuote = new LoanService()
+                    .quote(player.getId(), loanMonths.getValue());
+            close.run();
+            processLoanNegotiation(stage, player, loanQuote.requiredFee(),
+                    loanMonths.getValue());
+        });
+    }
+
+    private void processLoanNegotiation(Stage stage, Player player, double fee, int months) {
         try {
-            return value == null || value.isBlank() ? fallback : Integer.parseInt(value.trim());
-        } catch (NumberFormatException exception) {
-            return fallback;
+            new LoanService().requestLoan(player.getId(), career.getControlledTeam().getId(),
+                    fee, months, career.getCurrentDate());
+            showMessage("CESIÓN COMPLETADA", String.format(
+                    "%s se incorpora durante %d meses por €%.2fM.",
+                    player.getFullName(), months, fee / 1_000_000),
+                    () -> showMarket(stage));
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            showMessage("NO SE PUDO COMPLETAR LA CESIÓN", exception.getMessage());
         }
     }
 
-    private double parseOptionalMillions(String value, double fallback) {
-        try {
-            return value == null || value.isBlank() ? fallback
-                    : Double.parseDouble(value.replace(',', '.').trim()) * 1_000_000;
-        } catch (NumberFormatException exception) {
-            return fallback;
+    private void processTransferNegotiation(Stage stage, Player player, double amount,
+            double salary, int contractYears, double signingBonus,
+            double releaseClause, String squadRole, int upfrontPercent, double appearanceBonus) {
+        if (amount <= 0 || salary <= 0 || contractYears <= 0 || signingBonus < 0
+                || releaseClause < amount || squadRole == null) {
+            showMessage("OFERTA NO VÁLIDA", "Revisa la cantidad, el salario y la duración.");
+            return;
         }
+        try {
+            new PlayerAgentService().requireAgreement(player, salary, signingBonus,
+                    contractYears, releaseClause, squadRole);
+            TransferOfferService service = new TransferOfferService();
+            TransferOffer offer = service.evaluate(service.makeOffer(player.getId(),
+                    career.getControlledTeam().getId(), amount, career.getCurrentDate(),
+                    upfrontPercent, appearanceBonus).getId());
+            if (offer.getStatus() == footballcareer.model.enums.TransferOfferStatus.ACCEPTED) {
+                executeTransfer(offer, player, salary, contractYears, signingBonus,
+                        releaseClause, squadRole);
+                showMessage("FICHAJE COMPLETADO", player.getFullName()
+                        + " se incorpora a tu plantilla.", () -> showMarket(stage));
+            } else if (offer.getCounterAmount() != null) {
+                showNegotiationRound(stage, service, offer, player, salary, contractYears,
+                        signingBonus, releaseClause, squadRole);
+            } else {
+                showMessage("OFERTA RECHAZADA",
+                        "El club considera que la propuesta está demasiado lejos de su valoración.");
+            }
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            showMessage("NO SE PUDO ENVIAR LA OFERTA", exception.getMessage());
+        }
+    }
+
+    private void showNegotiationRound(Stage stage, TransferOfferService service,
+            TransferOffer offer, Player player, double salary, int contractYears,
+            double signingBonus, double releaseClause, String squadRole) {
+        double sellerRequest = offer.getCounterAmount();
+        double midpoint = (offer.getAmount() + sellerRequest) / 2;
+        TextField revised = new TextField(String.format(java.util.Locale.ROOT, "%.1f",
+                midpoint / 1_000_000));
+        revised.setPromptText("Nueva propuesta (€M)");
+        Label feedback = label(String.format(
+                "Tu oferta: €%.1fM  •  El club pide: €%.1fM",
+                offer.getAmount() / 1_000_000, sellerRequest / 1_000_000),
+                "warning-feedback");
+        Button accept = button("ACEPTAR €" + String.format("%.1fM",
+                sellerRequest / 1_000_000), "primary-button");
+        Button negotiate = button("ENVIAR NUEVA PROPUESTA", "secondary-button");
+        Button withdraw = button("RETIRARSE", "ghost-button");
+        VBox card = new VBox(14, label("RONDA DE NEGOCIACIÓN", "form-title"),
+                label(player.getFullName(), "match-highlight"), feedback, revised,
+                new FlowPane(10, 10, accept, negotiate, withdraw));
+        card.setPrefWidth(520); card.getStyleClass().add("in-app-dialog");
+        Runnable close = showOverlay(card);
+        accept.setOnAction(event -> {
+            close.run();
+            try {
+                TransferOffer accepted = service.acceptCounterOffer(offer.getId());
+                executeTransfer(accepted, player, salary, contractYears, signingBonus,
+                        releaseClause, squadRole);
+                showMessage("FICHAJE COMPLETADO", player.getFullName()
+                        + " se incorpora tras el acuerdo.", () -> showMarket(stage));
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                showMessage("NO SE PUDO CERRAR EL ACUERDO", exception.getMessage());
+            }
+        });
+        negotiate.setOnAction(event -> {
+            try {
+                double amount = Double.parseDouble(revised.getText().replace(',', '.'))
+                        * 1_000_000;
+                TransferOffer response = service.submitBuyerCounter(offer.getId(), amount);
+                close.run();
+                if (response.getStatus()
+                        == footballcareer.model.enums.TransferOfferStatus.ACCEPTED) {
+                    executeTransfer(response, player, salary, contractYears, signingBonus,
+                            releaseClause, squadRole);
+                    showMessage("FICHAJE COMPLETADO", "El club ha aceptado tu nueva propuesta.",
+                            () -> showMarket(stage));
+                } else if (response.getCounterAmount() != null) {
+                    showNegotiationRound(stage, service, response, player, salary,
+                            contractYears, signingBonus, releaseClause, squadRole);
+                } else {
+                    showMessage("NEGOCIACIÓN FINALIZADA", "El club ha rechazado la propuesta.");
+                }
+            } catch (NumberFormatException exception) {
+                feedback.setText("Introduce una cantidad numérica válida.");
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                feedback.setText(exception.getMessage());
+            }
+        });
+        withdraw.setOnAction(event -> {
+            service.cancelOffer(offer.getId(), career.getControlledTeam().getId());
+            close.run();
+            showMessage("NEGOCIACIÓN CANCELADA", "Has retirado la oferta por "
+                    + player.getFullName() + ".");
+        });
+    }
+
+    private void showMessage(String title, String detail) {
+        showMessage(title, detail, () -> {});
+    }
+
+    private void showMessage(String title, String detail, Runnable afterClose) {
+        Button closeButton = button("CONTINUAR", "primary-button");
+        VBox card = new VBox(16, label(title, "form-title"),
+                label(detail, "body-label"), closeButton);
+        card.setPrefWidth(460);
+        card.getStyleClass().add("in-app-dialog");
+        Runnable close = showOverlay(card);
+        closeButton.setOnAction(event -> {
+            close.run();
+            afterClose.run();
+        });
+    }
+
+    private void showDecision(String title, String detail, Runnable onAccept) {
+        Button accept = button("ACEPTAR", "primary-button");
+        Button reject = button("RECHAZAR", "ghost-button");
+        VBox card = new VBox(16, label(title, "form-title"),
+                label(detail, "body-label"), new FlowPane(10, 10, accept, reject));
+        card.setPrefWidth(460);
+        card.getStyleClass().add("in-app-dialog");
+        Runnable close = showOverlay(card);
+        reject.setOnAction(event -> close.run());
+        accept.setOnAction(event -> {
+            close.run();
+            onAccept.run();
+        });
+    }
+
+    private Runnable showOverlay(Node content) {
+        return responsiveContainer.overlay(appScene, content);
     }
 
     private String marketComparison(Player target) {
+        TransferOfferService.NegotiationQuote quote = new TransferOfferService()
+                .quote(target.getId());
         Player current = new PlayerRepository()
                 .findCurrentPlayersByTeam(career.getControlledTeam().getId()).stream()
                 .filter(player -> player.getPosition() == target.getPosition())
                 .max(Comparator.comparingInt(Player::getOverall)).orElse(null);
-        if (current == null) return "No tienes otro " + target.getPosition()
+        String posture = quote.transferListed()
+                ? String.format("EN VENTA  •  Precio €%.1fM", quote.requiredAmount() / 1_000_000)
+                : String.format("NO ESTÁ EN VENTA  •  Referencia del club €%.1fM",
+                quote.requiredAmount() / 1_000_000);
+        posture += "  •  " + quote.stance();
+        if (current == null) return posture + "\nNo tienes otro " + target.getPosition()
                 + " en plantilla. Sería una incorporación prioritaria.";
         int difference = target.getOverall() - current.getOverall();
-        return target.getFullName() + "  GRL " + target.getOverall() + "  •  Mejor actual: "
+        return posture + "\n" + target.getFullName() + "  GRL " + target.getOverall()
+                + "  •  Mejor actual: "
                 + current.getFullName() + "  GRL " + current.getOverall() + "  •  Diferencia "
                 + (difference >= 0 ? "+" : "") + difference;
     }
@@ -1187,12 +1919,64 @@ public class Main extends Application {
 
     private Node createSalesTab(PlayerMarketRepository marketRepository) {
         VBox box = panel("JUGADORES EN VENTA");
-        ListView<Player> ownPlayers = ownMarketPlayerList(marketRepository);
-        ownPlayers.getItems().addAll(new PlayerRepository()
-                .findCurrentPlayersByTeam(career.getControlledTeam().getId()));
+        java.util.Map<Long, Double> askingPrices = new java.util.HashMap<>(
+                marketRepository.findAllAskingPrices());
+        ListView<Player> ownPlayers = ownMarketPlayerList(askingPrices);
+        java.util.List<Player> squad = new PlayerRepository()
+                .findCurrentPlayersByTeam(career.getControlledTeam().getId());
+        TextField search = new TextField();
+        search.setPromptText("Buscar en mi plantilla...");
+        ComboBox<String> position = new ComboBox<>();
+        position.getItems().addAll("TODAS", "GK", "DEFENSA", "MEDIO", "ATAQUE");
+        position.setValue("TODAS");
+        ComboBox<String> sort = new ComboBox<>();
+        sort.getItems().addAll("POSICIÓN", "VALOR ↓", "GRL ↓", "NOMBRE");
+        sort.setValue("POSICIÓN");
+        CheckBox listedOnly = new CheckBox("Solo en venta");
+        Runnable refreshPlayers = () -> {
+            String query = search.getText() == null ? ""
+                    : search.getText().trim().toLowerCase();
+            Comparator<Player> comparator = switch (sort.getValue()) {
+                case "VALOR ↓" -> Comparator.comparingDouble(Player::getMarketValue).reversed();
+                case "GRL ↓" -> Comparator.comparingInt(Player::getOverall).reversed();
+                case "NOMBRE" -> Comparator.comparing(Player::getFullName);
+                default -> Comparator.comparingInt(player -> PlayerOrdering.position(player.getPosition()));
+            };
+            ownPlayers.getItems().setAll(squad.stream()
+                    .filter(player -> query.isEmpty()
+                            || player.getFullName().toLowerCase().contains(query))
+                    .filter(player -> matchesPositionGroup(player, position.getValue()))
+                    .filter(player -> !listedOnly.isSelected()
+                            || askingPrices.containsKey(player.getId()))
+                    .sorted(comparator.thenComparing(Player::getFullName)).toList());
+        };
+        search.textProperty().addListener((observable, oldValue, newValue) -> refreshPlayers.run());
+        position.setOnAction(event -> refreshPlayers.run());
+        sort.setOnAction(event -> refreshPlayers.run());
+        listedOnly.setOnAction(event -> refreshPlayers.run());
+        refreshPlayers.run();
         TextField askingPrice = new TextField();
         askingPrice.setPromptText("Precio solicitado en millones");
+        Label selectedSummary = label("Selecciona un jugador de tu plantilla.",
+                "comparison-label");
         Label feedback = label("Selecciona un jugador para gestionar su estado.", "muted-label");
+        ownPlayers.getSelectionModel().selectedItemProperty().addListener(
+                (observable, oldValue, selected) -> {
+                    if (selected == null) return;
+                    Double listedPrice = askingPrices.get(selected.getId());
+                    double suggested = listedPrice == null
+                            ? selected.getMarketValue() : listedPrice;
+                    selectedSummary.setText(selected.getFullName() + "  •  "
+                            + selected.getPosition() + "  •  GRL " + selected.getOverall()
+                            + String.format("  •  Valor €%.1fM", selected.getMarketValue() / 1_000_000)
+                            + (listedPrice == null ? "  •  NO LISTADO"
+                            : String.format("  •  En venta €%.1fM", listedPrice / 1_000_000)));
+                    askingPrice.setText(String.format(java.util.Locale.ROOT, "%.1f",
+                            suggested / 1_000_000));
+                    feedback.setText(listedPrice == null
+                            ? "Precio sugerido según su valor de mercado."
+                            : "Puedes modificar el precio solicitado actual.");
+                });
         Button listPlayer = button("PONER EN VENTA", "secondary-button");
         listPlayer.setOnAction(event -> {
             Player selected = ownPlayers.getSelectionModel().getSelectedItem();
@@ -1201,8 +1985,10 @@ public class Main extends Application {
                 double price = Double.parseDouble(askingPrice.getText().replace(',', '.'))
                         * 1_000_000;
                 marketRepository.listForTransfer(selected.getId(), price);
+                askingPrices.put(selected.getId(), price);
                 feedback.setText(selected.getFullName() + " está en venta.");
                 ownPlayers.refresh();
+                refreshPlayers.run();
                 animateFeedback(feedback, true);
             } catch (NumberFormatException exception) {
                 feedback.setText("Introduce un precio válido.");
@@ -1217,42 +2003,169 @@ public class Main extends Application {
             Player selected = ownPlayers.getSelectionModel().getSelectedItem();
             if (selected != null) {
                 marketRepository.removeFromTransferList(selected.getId());
+                askingPrices.remove(selected.getId());
                 feedback.setText(selected.getFullName() + " ya no está en venta.");
                 ownPlayers.refresh();
+                refreshPlayers.run();
                 animateFeedback(feedback, true);
             }
         });
         VBox.setVgrow(ownPlayers, Priority.ALWAYS);
-        box.getChildren().addAll(ownPlayers, askingPrice,
-                new FlowPane(10, 10, listPlayer, removePlayer), feedback);
+        VBox roster = panel("MI PLANTILLA");
+        roster.getChildren().addAll(new FlowPane(10, 10,
+                search, position, sort, listedOnly), ownPlayers);
+        VBox saleDesk = panel("DECISIÓN DE VENTA");
+        saleDesk.setMinWidth(330);
+        saleDesk.getChildren().addAll(selectedSummary,
+                label("PRECIO SOLICITADO (€M)", "objective-title"), askingPrice,
+                new FlowPane(10, 10, listPlayer, removePlayer), feedback,
+                label("Ponerlo en venta permite que la IA envíe ofertas durante "
+                        + "las jornadas de mercado.", "muted-label"));
+        SplitPane workspace = new SplitPane(roster, saleDesk);
+        workspace.setDividerPositions(0.67);
+        VBox.setVgrow(workspace, Priority.ALWAYS);
+        box.getChildren().add(workspace);
         return box;
     }
 
     private Node createIncomingOffersTab(Stage stage) {
         VBox box = panel("BANDEJA DE OFERTAS");
         Label feedback = label("Las ofertas de otros clubes aparecerán aquí.", "muted-label");
-        ListView<TransferOffer> incoming = incomingOfferList();
+        java.util.Map<Long, Player> playersById = new PlayerRepository().findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Player::getId, player -> player));
+        java.util.Map<Long, Team> teamsById = teams.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Team::getId, team -> team));
+        java.util.Map<Long, Double> askingPrices = new PlayerMarketRepository()
+                .findAllAskingPrices();
+        ListView<TransferOffer> incoming = incomingOfferList(
+                playersById, teamsById, askingPrices);
         incoming.getItems().addAll(new TransferOfferRepository()
                 .findPendingBySellingTeam(career.getControlledTeam().getId()));
+        Label comparison = label("Selecciona una oferta para valorar la propuesta.",
+                "comparison-label");
+        TextField counterAmount = new TextField();
+        counterAmount.setPromptText("Contraoferta en millones");
+        incoming.getSelectionModel().selectedItemProperty().addListener(
+                (observable, oldValue, selected) -> {
+                    if (selected == null) return;
+                    Player player = playersById.get(selected.getPlayer().getId());
+                    Double asking = askingPrices.get(player.getId());
+                    double reference = asking == null ? player.getMarketValue() : asking;
+                    double difference = selected.getAmount() - reference;
+                    comparison.setText(String.format("Oferta €%.1fM  •  %s €%.1fM  •  Diferencia %+.1fM",
+                            selected.getAmount() / 1_000_000,
+                            asking == null ? "Valor" : "Precio solicitado",
+                            reference / 1_000_000, difference / 1_000_000));
+                    counterAmount.setText(String.format(java.util.Locale.ROOT, "%.1f",
+                            Math.max(reference, selected.getAmount() * 1.05) / 1_000_000));
+                });
         Button accept = button("ACEPTAR OFERTA", "primary-button");
-        accept.setOnAction(event -> respondToIncomingOffer(stage,
+        accept.setOnAction(event -> respondToIncomingOffer(incoming,
                 incoming.getSelectionModel().getSelectedItem(), true, feedback));
         Button reject = button("RECHAZAR", "ghost-button");
-        reject.setOnAction(event -> respondToIncomingOffer(stage,
+        reject.setOnAction(event -> respondToIncomingOffer(incoming,
                 incoming.getSelectionModel().getSelectedItem(), false, feedback));
+        Button counter = button("ENVIAR CONTRAOFERTA", "secondary-button");
+        counter.setOnAction(event -> respondWithIncomingCounter(incoming,
+                incoming.getSelectionModel().getSelectedItem(), counterAmount, feedback));
         VBox.setVgrow(incoming, Priority.ALWAYS);
-        box.getChildren().addAll(incoming, new FlowPane(10, 10, accept, reject), feedback);
+        box.getChildren().addAll(incoming, comparison, counterAmount,
+                new FlowPane(10, 10, accept, counter, reject), feedback);
         return box;
     }
 
+    private Node createSentOffersTab(Stage stage) {
+        VBox box = panel("SEGUIMIENTO DE NEGOCIACIONES");
+        Label feedback = label("Selecciona una oferta pendiente para cancelarla.", "muted-label");
+        java.util.Map<Long, Player> playersById = new PlayerRepository().findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Player::getId, player -> player));
+        java.util.Map<Long, Team> teamsById = teams.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Team::getId, team -> team));
+        ListView<TransferOffer> sent = new ListView<>();
+        sent.getStyleClass().add("data-list");
+        sent.setCellFactory(view -> new ListCell<>() {
+            @Override protected void updateItem(TransferOffer offer, boolean empty) {
+                super.updateItem(offer, empty);
+                if (empty || offer == null) setText(null);
+                else {
+                    Player player = playersById.get(offer.getPlayer().getId());
+                    Team seller = teamsById.get(offer.getSellingTeam().getId());
+                    String counter = offer.getCounterAmount() == null ? ""
+                            : String.format("  •  Contraoferta €%.1fM",
+                            offer.getCounterAmount() / 1_000_000);
+                    setText(player.getFullName() + "  •  " + seller.getName()
+                            + String.format("  •  €%.1fM", offer.getAmount() / 1_000_000)
+                            + "  •  " + offerStatusLabel(offer) + counter
+                            + "  •  límite " + offer.getResponseDeadline());
+                }
+            }
+        });
+        sent.getItems().addAll(new TransferOfferRepository()
+                .findByBuyingTeam(career.getControlledTeam().getId()));
+        Button cancel = button("CANCELAR OFERTA PENDIENTE", "ghost-button");
+        cancel.setOnAction(event -> {
+            TransferOffer selected = sent.getSelectionModel().getSelectedItem();
+            if (selected == null) {
+                feedback.setText("Selecciona primero una oferta.");
+                animateFeedback(feedback, false);
+                return;
+            }
+            try {
+                TransferOffer updated = new TransferOfferService().cancelOffer(selected.getId(),
+                        career.getControlledTeam().getId());
+                selected.setStatus(updated.getStatus());
+                selected.setResolutionReason(updated.getResolutionReason());
+                sent.refresh();
+                feedback.setText("Oferta retirada. El historial conservará la negociación.");
+                animateFeedback(feedback, true);
+            } catch (IllegalStateException exception) {
+                feedback.setText("Solo se pueden cancelar ofertas que siguen pendientes.");
+                animateFeedback(feedback, false);
+            }
+        });
+        if (sent.getItems().isEmpty()) sent.setPlaceholder(label(
+                "Aún no has enviado ofertas en esta carrera.", "muted-label"));
+        VBox.setVgrow(sent, Priority.ALWAYS);
+        box.getChildren().addAll(sent, cancel, feedback);
+        return box;
+    }
+
+    private String offerStatusLabel(TransferOffer offer) {
+        if (offer.getStatus() == footballcareer.model.enums.TransferOfferStatus.WITHDRAWN) {
+            return "EXPIRED".equals(offer.getResolutionReason()) ? "CADUCADA" : "CANCELADA";
+        }
+        return switch (offer.getStatus()) {
+            case PENDING -> "PENDIENTE";
+            case ACCEPTED -> "ACEPTADA";
+            case REJECTED -> "RECHAZADA";
+            case COMPLETED -> "COMPLETADA";
+            case WITHDRAWN -> "CANCELADA";
+        };
+    }
+
     private void executeTransfer(TransferOffer offer, Player player) {
+        executeTransfer(offer, player, player.getSalary(), 3);
+    }
+
+    private void executeTransfer(TransferOffer offer, Player player,
+            double salary, int contractYears) {
         new TransferExecutionService().completeTransfer(offer.getId(),
-                player.getSalary(), java.time.LocalDate.of(
-                        career.getCurrentDate().getYear() + 3, 6, 30),
+                salary, career.getCurrentDate().plusYears(contractYears),
                 career.getCurrentSeason().getId(), career.getCurrentDate());
     }
 
-    private void respondToIncomingOffer(Stage stage, TransferOffer offer,
+    private void executeTransfer(TransferOffer offer, Player player,
+            double salary, int contractYears, double signingBonus,
+            double releaseClause, String squadRole) {
+        TransferExecutionService.ContractTerms terms =
+                new TransferExecutionService.ContractTerms(salary, signingBonus,
+                        releaseClause, squadRole);
+        new TransferExecutionService().completeTransfer(offer.getId(), terms,
+                career.getCurrentDate().plusYears(contractYears),
+                career.getCurrentSeason().getId(), career.getCurrentDate());
+    }
+
+    private void respondToIncomingOffer(ListView<TransferOffer> incoming, TransferOffer offer,
             boolean accept, Label feedback) {
         if (offer == null) {
             feedback.setText("Selecciona una oferta recibida.");
@@ -1268,7 +2181,40 @@ public class Main extends Application {
                 feedback.setText("Venta completada: " + player.getFullName());
             } else feedback.setText("Oferta rechazada.");
             animateFeedback(feedback, accept);
-            refreshMarketAfter(stage);
+            incoming.getItems().remove(offer);
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            feedback.setText(exception.getMessage());
+            animateFeedback(feedback, false);
+        }
+    }
+
+    private void respondWithIncomingCounter(ListView<TransferOffer> incoming, TransferOffer offer,
+            TextField counterAmount, Label feedback) {
+        if (offer == null) {
+            feedback.setText("Selecciona una oferta recibida.");
+            animateFeedback(feedback, false);
+            return;
+        }
+        try {
+            double amount = Double.parseDouble(counterAmount.getText().replace(',', '.'))
+                    * 1_000_000;
+            TransferOffer updated = new TransferOfferService()
+                    .respondWithCounterOffer(offer.getId(), amount);
+            if (updated.getStatus()
+                    == footballcareer.model.enums.TransferOfferStatus.ACCEPTED) {
+                Player player = new PlayerRepository().findById(updated.getPlayer().getId());
+                executeTransfer(updated, player);
+                feedback.setText("Contraoferta aceptada. Venta completada: "
+                        + player.getFullName());
+                animateFeedback(feedback, true);
+            } else {
+                feedback.setText("El club comprador ha rechazado la contraoferta.");
+                animateFeedback(feedback, false);
+            }
+            incoming.getItems().remove(offer);
+        } catch (NumberFormatException exception) {
+            feedback.setText("Introduce una contraoferta válida.");
+            animateFeedback(feedback, false);
         } catch (IllegalArgumentException | IllegalStateException exception) {
             feedback.setText(exception.getMessage());
             animateFeedback(feedback, false);
@@ -1276,20 +2222,7 @@ public class Main extends Application {
     }
 
     private void animateFeedback(Label feedback, boolean success) {
-        feedback.getStyleClass().removeAll("success-feedback", "warning-feedback");
-        feedback.getStyleClass().add(success ? "success-feedback" : "warning-feedback");
-        feedback.setOpacity(0.15);
-        javafx.animation.FadeTransition fade = new javafx.animation.FadeTransition(
-                javafx.util.Duration.millis(450), feedback);
-        fade.setToValue(1);
-        fade.play();
-    }
-
-    private void refreshMarketAfter(Stage stage) {
-        javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(
-                javafx.util.Duration.seconds(1.1));
-        pause.setOnFinished(event -> showMarket(stage));
-        pause.play();
+        feedbackAnimator.animate(feedback, success);
     }
 
     private void showPlayer(Stage stage, Player player, String origin) {
@@ -1313,6 +2246,23 @@ public class Main extends Application {
         addAttribute(attributes, 0, "Ritmo", player.getPace(), "Tiro", player.getShooting());
         addAttribute(attributes, 1, "Pase", player.getPassing(), "Regate", player.getDribbling());
         addAttribute(attributes, 2, "Defensa", player.getDefending(), "Físico", player.getPhysical());
+        var assessment = new PlayerRoleAssessmentService().assess(player, state);
+        VBox performance = panel("LECTURA FUTBOLÍSTICA");
+        FlowPane impactChips = new FlowPane(9, 9);
+        assessment.attributes().forEach(attribute -> {
+            Label chip = label((attribute.key() ? "★ " : "") + attribute.name() + "  "
+                    + attribute.value(), attribute.key() ? "status-chip" : "muted-chip");
+            Tooltip.install(chip, new Tooltip(attribute.effect()));
+            impactChips.getChildren().add(chip);
+        });
+        performance.getChildren().addAll(
+                label("Nivel efectivo hoy  " + assessment.effectiveLevel() + "  •  "
+                        + assessment.condition(), "comparison-label"),
+                impactChips,
+                label("Fortaleza clave: " + assessment.strongest()
+                        + "  •  Aspecto prioritario: " + assessment.weakness()
+                        + ". Las estrellas señalan los atributos de mayor peso para "
+                        + player.getPosition() + ".", "muted-label"));
         VBox contractPanel = panel("CONTRATO");
         contractPanel.getChildren().add(label(contract == null ? "Sin contrato activo"
                 : String.format("Hasta %s  •  Salario €%.2fM",
@@ -1354,41 +2304,86 @@ public class Main extends Application {
                 + seasonStats.getGoals() + "  •  Asistencias " + seasonStats.getAssists()
                 + "  •  Valoración " + String.format("%.2f", seasonStats.getAverageRating()),
                 "body-label"));
+        VBox evolution = new PlayerEvolutionView().build(player, career.getCurrentDate());
+        java.util.List<Player> currentSquad = new PlayerRepository()
+                .findCurrentPlayersByTeam(career.getControlledTeam().getId());
+        boolean ownPlayer = currentTeamId != null
+                && currentTeamId == career.getControlledTeam().getId();
+        VBox profile = panel("PERFIL Y ESTATUS");
+        String role = ownPlayer ? squadRole(player, currentSquad) : "RIVAL";
+        String expectedMinutes = switch (role) {
+            case "CLAVE" -> "La mayoría de partidos";
+            case "TITULAR" -> "Titular habitual";
+            case "ROTACIÓN" -> "Rotación frecuente";
+            case "PROMESA" -> "Desarrollo progresivo";
+            default -> "Sin compromiso";
+        };
+        profile.getChildren().addAll(
+                label("Pierna preferida  " + player.getPreferredFoot()
+                        + "  •  Altura  " + player.getHeightCm() + " cm", "body-label"),
+                label("Posición natural  " + player.getPosition()
+                        + "  •  Secundaria  " + (player.getSecondaryPosition() == null
+                        ? "—" : player.getSecondaryPosition()), "body-label"),
+                label("Rol  " + role + "  •  Minutos esperados  " + expectedMinutes,
+                        "body-label"),
+                label("Moral  " + (state == null ? "—" : state.getMorale())
+                        + "/100  •  Valor  €" + String.format("%.1fM",
+                        player.getMarketValue() / 1_000_000), "comparison-label"),
+                label("Disponibilidad  " + availabilityLabel(state, career.getCurrentDate()),
+                        state != null && !state.isAvailableOn(career.getCurrentDate())
+                                ? "warning-feedback" : "success-feedback"));
+
+        VBox actions = panel("ACCIONES");
+        FlowPane actionButtons = new FlowPane(10, 10);
+        if (ownPlayer) {
+            TextField askingPrice = new TextField(String.format(java.util.Locale.ROOT, "%.1f",
+                    player.getMarketValue() / 1_000_000));
+            askingPrice.setPromptText("Precio de venta (€M)");
+            Button sell = button("PONER EN VENTA", "secondary-button");
+            Label actionFeedback = label("Gestiona al jugador sin abandonar su ficha.",
+                    "muted-label");
+            sell.setOnAction(event -> {
+                try {
+                    double price = Double.parseDouble(askingPrice.getText().replace(',', '.'))
+                            * 1_000_000;
+                    new PlayerMarketRepository().listForTransfer(player.getId(), price);
+                    actionFeedback.setText("Jugador puesto en venta por €"
+                            + String.format("%.1fM", price / 1_000_000) + ".");
+                    animateFeedback(actionFeedback, true);
+                } catch (IllegalArgumentException exception) {
+                    actionFeedback.setText("Introduce un precio de venta válido.");
+                    animateFeedback(actionFeedback, false);
+                }
+            });
+            Button lineup = button("LLEVAR A ALINEACIÓN", "primary-button");
+            lineup.setOnAction(event -> {
+                requestedLineupPlayerId = player.getId();
+                showLineup(stage);
+            });
+            actionButtons.getChildren().addAll(askingPrice, sell, lineup);
+            actions.getChildren().addAll(actionButtons, actionFeedback,
+                    playerConversationView.build(career, player));
+        } else {
+            Button negotiate = button("NEGOCIAR FICHAJE", "primary-button");
+            negotiate.setOnAction(event -> showTransferNegotiation(stage, player));
+            actionButtons.getChildren().add(negotiate);
+            actions.getChildren().add(actionButtons);
+        }
         Button back = button("market".equals(origin)
                 ? "VOLVER AL MERCADO" : "VOLVER A LA PLANTILLA", "ghost-button");
         back.setOnAction(event -> {
             if ("market".equals(origin)) showMarket(stage);
             else showSquad(stage);
         });
-        content.getChildren().addAll(headline, attributes, contractPanel, statsPanel, back);
+        content.getChildren().addAll(headline, attributes, performance, profile, contractPanel,
+                statsPanel, evolution, actions, back);
         showCareerShell(stage, content);
     }
 
     private void showTransferHistory(Stage stage) {
         activeSection = "history";
-        VBox content = page("HISTORIAL DE FICHAJES",
-                career.getControlledTeam().getName() + "  •  Altas y bajas");
-        ListView<String> history = new ListView<>();
-        history.getStyleClass().add("data-list");
-        PlayerRepository playerRepository = new PlayerRepository();
-        TeamRepository teamRepository = new TeamRepository();
-        for (Transfer transfer : new TransferRepository()
-                .findByTeam(career.getControlledTeam().getId())) {
-            Player player = playerRepository.findById(transfer.getPlayer().getId());
-            Team from = teamRepository.findById(transfer.getFromTeam().getId());
-            Team to = teamRepository.findById(transfer.getToTeam().getId());
-            String direction = transfer.getToTeam().getId()
-                    == career.getControlledTeam().getId() ? "ALTA" : "BAJA";
-            history.getItems().add(String.format(
-                    "%s  •  %s  •  %s → %s  •  €%.1fM  •  %s",
-                    direction, player.getFullName(), from.getShortName(), to.getShortName(),
-                    transfer.getAmount() / 1_000_000, transfer.getTransferDate()));
-        }
-        if (history.getItems().isEmpty()) history.getItems().add(
-                "Todavía no hay fichajes registrados para este club.");
-        VBox.setVgrow(history, Priority.ALWAYS);
-        content.getChildren().add(history);
-        showCareerShell(stage, content);
+        showCareerShell(stage, transferHistoryView.build(
+                career.getControlledTeam().getName(), career.getControlledTeam().getId()));
     }
 
     private void showTraining(Stage stage) {
@@ -1422,6 +2417,97 @@ public class Main extends Application {
                         "INTENSIVA", "Mejora la forma a costa de energía y moral.",
                         "Forma +4  •  Fitness -8  •  Moral -1", completed != null));
         content.getChildren().addAll(status, choices);
+        showCareerShell(stage, content);
+    }
+
+    private void showMedical(Stage stage) {
+        activeSection = "medical";
+        VBox content = page("CENTRO MÉDICO",
+                "Diagnóstico, recuperación y sanciones de la plantilla");
+        java.util.Map<Long, PlayerState> states = new PlayerStateRepository().findAll();
+        java.util.List<Player> unavailable = new PlayerRepository()
+                .findCurrentPlayersByTeam(career.getControlledTeam().getId()).stream()
+                .filter(player -> {
+                    PlayerState state = states.get(player.getId());
+                    return state != null && !state.isAvailableOn(career.getCurrentDate());
+                }).toList();
+        ListView<Player> patients = new ListView<>();
+        patients.getStyleClass().add("data-list");
+        patients.setCellFactory(view -> new ListCell<>() {
+            @Override protected void updateItem(Player player, boolean empty) {
+                super.updateItem(player, empty);
+                if (empty || player == null) setText(null);
+                else {
+                    PlayerState state = states.get(player.getId());
+                    long days = java.time.temporal.ChronoUnit.DAYS.between(
+                            career.getCurrentDate(), state.getUnavailableUntil());
+                    setText(player.getPosition() + "  •  " + player.getFullName()
+                            + "  •  " + availabilityLabel(state, career.getCurrentDate())
+                            + "  •  " + Math.max(1, days) + " día(s)"
+                            + "  •  Fitness " + state.getFitness());
+                }
+            }
+        });
+        patients.getItems().addAll(unavailable);
+        patients.setPlaceholder(label("No hay jugadores lesionados ni sancionados.",
+                "muted-label"));
+        Label detail = label("Selecciona un lesionado para decidir su recuperación.",
+                "comparison-label");
+        patients.getSelectionModel().selectedItemProperty().addListener(
+                (observable, oldValue, selected) -> {
+                    if (selected == null) return;
+                    PlayerState state = states.get(selected.getId());
+                    detail.setText("INJURY".equals(state.getUnavailableReason())
+                            ? "Rehabilitación: -2 días y +6 fitness. Especialista: -5 días y +2 fitness."
+                            : "Las sanciones son disciplinarias y no admiten tratamiento médico.");
+                });
+        Label feedback = label("Solo puede aplicarse un tratamiento por jugador y día.",
+                "muted-label");
+        Button rehab = button("REHABILITACIÓN", "primary-button");
+        Button specialist = button("CONSULTAR ESPECIALISTA", "secondary-button");
+        java.util.function.Consumer<MedicalTreatmentService.Treatment> treat = treatment -> {
+            Player selected = patients.getSelectionModel().getSelectedItem();
+            if (selected == null) {
+                feedback.setText("Selecciona primero un jugador lesionado.");
+                animateFeedback(feedback, false);
+                return;
+            }
+            try {
+                MedicalTreatmentService.Result result = new MedicalTreatmentService()
+                        .treat(career, selected.getId(), treatment);
+                feedback.setText("Regreso adelantado del " + result.previousReturn()
+                        + " al " + result.newReturn() + ". Fitness +" + result.fitnessGain() + ".");
+                animateFeedback(feedback, true);
+                PlayerState refreshed = new PlayerStateRepository().findByPlayer(selected.getId());
+                states.put(selected.getId(), refreshed);
+                patients.refresh();
+                rehab.setDisable(true);
+                specialist.setDisable(true);
+            } catch (IllegalStateException exception) {
+                feedback.setText(exception.getMessage());
+                animateFeedback(feedback, false);
+            }
+        };
+        rehab.setOnAction(event -> treat.accept(MedicalTreatmentService.Treatment.REHAB));
+        specialist.setOnAction(event -> treat.accept(
+                MedicalTreatmentService.Treatment.SPECIALIST));
+        patients.getSelectionModel().selectedItemProperty().addListener(
+                (observable, oldValue, selected) -> {
+                    boolean disabled = selected == null;
+                    if (selected != null) {
+                        PlayerState state = states.get(selected.getId());
+                        disabled = !"INJURY".equals(state.getUnavailableReason())
+                                || new MedicalTreatmentService().treatedToday(career.getId(),
+                                selected.getId(), career.getCurrentDate());
+                    }
+                    rehab.setDisable(disabled);
+                    specialist.setDisable(disabled);
+                });
+        VBox medicalDesk = panel("PLAN DE RECUPERACIÓN");
+        medicalDesk.getChildren().addAll(detail,
+                new FlowPane(10, 10, rehab, specialist), feedback);
+        VBox.setVgrow(patients, Priority.ALWAYS);
+        content.getChildren().addAll(patients, medicalDesk);
         showCareerShell(stage, content);
     }
 
@@ -1475,107 +2561,280 @@ public class Main extends Application {
         MatchLineup initial = lineupService.selectMatchLineup(nextMatch.getId(), teamId);
         ListView<Player> starters = playerList();
         starters.getItems().addAll(initial.getStarters());
-        ListView<Player> substitutes = playerList();
-        substitutes.getItems().addAll(initial.getSubstitutes());
-        ListView<Player> reserves = playerList();
+        java.util.Set<Long> benchIds = initial.getSubstitutes().stream()
+                .map(Player::getId).collect(java.util.stream.Collectors.toCollection(
+                        java.util.LinkedHashSet::new));
+        ListView<Player> available = lineupAvailableList(benchIds);
+        java.util.Map<Long, PlayerState> lineupStates = new PlayerStateRepository().findAll();
         new PlayerRepository().findCurrentPlayersByTeam(teamId).stream()
                 .filter(player -> starters.getItems().stream()
                 .noneMatch(starter -> starter.getId() == player.getId()))
-                .filter(player -> substitutes.getItems().stream()
-                .noneMatch(substitute -> substitute.getId() == player.getId()))
-                .forEach(reserves.getItems()::add);
+                .filter(player -> {
+                    PlayerState state = lineupStates.get(player.getId());
+                    return state != null && state.isAvailableOn(career.getCurrentDate());
+                })
+                .sorted(Comparator.comparingInt((Player player) -> PlayerOrdering.position(
+                        player.getPosition())).thenComparing(
+                        Comparator.comparingInt(Player::getOverall).reversed()))
+                .forEach(available.getItems()::add);
+        if (requestedLineupPlayerId != null) {
+            available.getItems().stream()
+                    .filter(player -> player.getId() == requestedLineupPlayerId)
+                    .findFirst().ifPresent(player -> available.getSelectionModel().select(player));
+            starters.getItems().stream()
+                    .filter(player -> player.getId() == requestedLineupPlayerId)
+                    .findFirst().ifPresent(player -> starters.getSelectionModel().select(player));
+            requestedLineupPlayerId = null;
+        }
         VBox tacticalPitch = new VBox(14);
         tacticalPitch.getStyleClass().add("tactical-pitch");
         ComboBox<String> formation = new ComboBox<>();
         formation.getItems().addAll("4-3-3", "4-2-3-1", "4-4-2");
-        formation.setValue(tacticsRepository.findFormation(nextMatch.getId(), teamId));
+        MatchTacticsRepository.TacticalSetup savedTactics = tacticsRepository.find(
+                nextMatch.getId(), teamId);
+        MatchRoleRepository.Assignment savedRoles = new MatchRoleRepository()
+                .find(nextMatch.getId(), teamId);
+        ComboBox<Player> captain = new ComboBox<>(); captain.setConverter(playerStringConverter());
+        ComboBox<Player> penalties = new ComboBox<>(); penalties.setConverter(playerStringConverter());
+        ComboBox<Player> corners = new ComboBox<>(); corners.setConverter(playerStringConverter());
+        java.util.function.BiFunction<Long, java.util.Comparator<Player>, Player> rolePlayer =
+                (savedId, fallback) -> starters.getItems().stream()
+                        .filter(player -> savedId != null && player.getId() == savedId).findFirst()
+                        .orElseGet(() -> starters.getItems().stream().max(fallback).orElse(null));
+        formation.setValue(savedTactics.formation());
+        ComboBox<String> mentality = new ComboBox<>();
+        mentality.getItems().addAll("DEFENSIVE", "BALANCED", "ATTACKING");
+        mentality.setValue(savedTactics.mentality());
+        ComboBox<String> pressing = new ComboBox<>(); pressing.getItems().addAll(
+                "LOW", "MEDIUM", "HIGH");
+        pressing.setValue(savedTactics.pressing());
+        ComboBox<String> tempo = new ComboBox<>(); tempo.getItems().addAll(
+                "SLOW", "NORMAL", "FAST");
+        tempo.setValue(savedTactics.tempo());
         Label tacticalWarning = label("", "warning-feedback");
+        Runnable[] refreshEditorRef = {null};
         Runnable refreshPitch = () -> {
             java.util.List<Player> selected = java.util.List.copyOf(starters.getItems());
             renderPitch(tacticalPitch, selected, formation.getValue());
-            tacticalWarning.setText(formationAssessment(selected, formation.getValue()));
+            installPitchInteractions(tacticalPitch, starters, available, benchIds,
+                    refreshEditorRef);
+            tacticalWarning.setText(formationAssessment(selected, formation.getValue(), lineupStates)
+                    + "  •  " + tacticalRiskSummary(mentality.getValue(), pressing.getValue(),
+                    tempo.getValue()));
         };
         formation.setOnAction(event -> refreshPitch.run());
+        mentality.setOnAction(event -> refreshPitch.run());
+        pressing.setOnAction(event -> refreshPitch.run());
+        tempo.setOnAction(event -> refreshPitch.run());
         refreshPitch.run();
-        Label count = label("Titulares: 11 / 11", "eyebrow");
-        Button removeStarter = button("BAJAR DEL ONCE  →", "secondary-button");
+        Label count = label("", "eyebrow");
+        Label editorHint = label(
+                "Selecciona un titular y después un jugador disponible para intercambiarlos.",
+                "muted-label");
+        available.setMinHeight(170);
+        available.setPrefHeight(290);
+        Runnable refreshEditor = () -> {
+            count.setText("TITULARES  " + starters.getItems().size() + " / 11");
+            long benchCount = available.getItems().stream()
+                    .filter(player -> benchIds.contains(player.getId())).count();
+            editorHint.setText("Disponibles: " + available.getItems().size()
+                    + "  •  Banquillo: " + benchCount + " / 7  •  Reservas: "
+                    + (available.getItems().size() - benchCount));
+            available.refresh();
+            Player selectedCaptain = captain.getValue(); Player selectedPenalty = penalties.getValue();
+            Player selectedCorner = corners.getValue();
+            captain.getItems().setAll(starters.getItems()); penalties.getItems().setAll(starters.getItems());
+            corners.getItems().setAll(starters.getItems());
+            captain.setValue(starters.getItems().contains(selectedCaptain) ? selectedCaptain
+                    : rolePlayer.apply(savedRoles == null ? null : savedRoles.captainId(),
+                    Comparator.comparingInt(Player::getOverall)));
+            penalties.setValue(starters.getItems().contains(selectedPenalty) ? selectedPenalty
+                    : rolePlayer.apply(savedRoles == null ? null : savedRoles.penaltyTakerId(),
+                    Comparator.comparingInt(Player::getShooting)));
+            corners.setValue(starters.getItems().contains(selectedCorner) ? selectedCorner
+                    : rolePlayer.apply(savedRoles == null ? null : savedRoles.cornerTakerId(),
+                    Comparator.comparingInt(Player::getPassing)));
+            refreshPitch.run();
+        };
+        refreshEditorRef[0] = refreshEditor;
+        Button swap = button("INTERCAMBIAR", "primary-button");
+        swap.setOnAction(event -> {
+            Player outgoing = starters.getSelectionModel().getSelectedItem();
+            Player incoming = available.getSelectionModel().getSelectedItem();
+            if (outgoing == null || incoming == null) {
+                editorHint.setText("Selecciona un titular y un jugador de la lista disponible.");
+                return;
+            }
+            int slot = starters.getItems().indexOf(outgoing);
+            starters.getItems().set(slot, incoming);
+            available.getItems().remove(incoming);
+            available.getItems().add(outgoing);
+            if (benchIds.remove(incoming.getId())) benchIds.add(outgoing.getId());
+            starters.getSelectionModel().select(slot);
+            editorHint.setText(incoming.getFullName() + " entra por " + outgoing.getFullName() + ".");
+            refreshEditor.run();
+        });
+        Button addStarter = button("COMPLETAR HUECO", "secondary-button");
+        addStarter.setOnAction(event -> {
+            Player incoming = available.getSelectionModel().getSelectedItem();
+            if (incoming == null) {
+                editorHint.setText("Selecciona primero un jugador disponible.");
+            } else if (starters.getItems().size() >= 11) {
+                editorHint.setText("El once está completo: selecciona un titular y usa INTERCAMBIAR.");
+            } else {
+                available.getItems().remove(incoming);
+                benchIds.remove(incoming.getId());
+                starters.getItems().add(incoming);
+                editorHint.setText(incoming.getFullName() + " se incorpora al once.");
+                refreshEditor.run();
+            }
+        });
+        Button removeStarter = button("QUITAR DEL ONCE", "ghost-button");
         removeStarter.setOnAction(event -> {
             Player selected = starters.getSelectionModel().getSelectedItem();
-            if (selected != null) {
-                starters.getItems().remove(selected);
-                reserves.getItems().add(selected);
-                count.setText("Titulares: " + starters.getItems().size() + " / 11");
-                refreshPitch.run();
+            if (selected == null) {
+                editorHint.setText("Selecciona el titular que quieres retirar.");
+                return;
             }
+            starters.getItems().remove(selected);
+            benchIds.remove(selected.getId());
+            available.getItems().add(selected);
+            available.getSelectionModel().select(selected);
+            editorHint.setText("Hueco libre en el once. Elige un sustituto y pulsa COMPLETAR HUECO.");
+            refreshEditor.run();
         });
-        Button addStarter = button("←  SUBIR AL ONCE", "primary-button");
-        addStarter.setOnAction(event -> {
-            Player selected = substitutes.getSelectionModel().getSelectedItem();
-            if (selected == null) selected = reserves.getSelectionModel().getSelectedItem();
-            if (selected != null && starters.getItems().size() < 11) {
-                substitutes.getItems().remove(selected);
-                reserves.getItems().remove(selected);
-                starters.getItems().add(selected);
-                count.setText("Titulares: " + starters.getItems().size() + " / 11");
-                refreshPitch.run();
-            }
-        });
-        VBox controls = new VBox(12, count, addStarter, removeStarter);
-        controls.setAlignment(Pos.CENTER);
-        VBox startersPanel = panel("ONCE TITULAR");
-        startersPanel.getChildren().add(starters);
-        VBox substitutesPanel = panel("BANQUILLO  •  MÁXIMO 7");
-        substitutesPanel.getChildren().add(substitutes);
-        VBox reservesPanel = panel("RESERVAS");
-        reservesPanel.getChildren().add(reserves);
         Button toBench = button("AÑADIR AL BANQUILLO", "secondary-button");
         Button toReserves = button("PASAR A RESERVAS", "ghost-button");
         toBench.setOnAction(event -> {
-            Player selected = reserves.getSelectionModel().getSelectedItem();
-            if (selected != null && substitutes.getItems().size() < 7) {
-                reserves.getItems().remove(selected);
-                substitutes.getItems().add(selected);
+            Player selected = available.getSelectionModel().getSelectedItem();
+            if (selected != null && benchIds.size() < 7) {
+                benchIds.add(selected.getId());
+                refreshEditor.run();
+            } else if (selected != null) {
+                editorHint.setText("El banquillo ya tiene siete jugadores.");
             }
         });
         toReserves.setOnAction(event -> {
-            Player selected = substitutes.getSelectionModel().getSelectedItem();
+            Player selected = available.getSelectionModel().getSelectedItem();
             if (selected != null) {
-                substitutes.getItems().remove(selected);
-                reserves.getItems().add(selected);
+                benchIds.remove(selected.getId());
+                refreshEditor.run();
             }
         });
-        VBox benchManagement = new VBox(10, substitutesPanel,
-                new FlowPane(8, 8, toBench, toReserves), reservesPanel);
-        HBox pitch = new HBox(14, startersPanel, controls, benchManagement);
-        HBox.setHgrow(startersPanel, Priority.ALWAYS);
-        HBox.setHgrow(benchManagement, Priority.ALWAYS);
+        Button recommended = button("RESTAURAR ONCE RECOMENDADO", "secondary-button");
+        recommended.setOnAction(event -> {
+            MatchLineup suggestion = lineupService.selectMatchLineup(teamId);
+            starters.getItems().setAll(suggestion.getStarters());
+            benchIds.clear();
+            suggestion.getSubstitutes().forEach(player -> benchIds.add(player.getId()));
+            java.util.Set<Long> starterIds = starters.getItems().stream()
+                    .map(Player::getId).collect(java.util.stream.Collectors.toSet());
+            available.getItems().setAll(new PlayerRepository().findCurrentPlayersByTeam(teamId)
+                    .stream().filter(player -> !starterIds.contains(player.getId()))
+                    .filter(player -> {
+                        PlayerState state = lineupStates.get(player.getId());
+                        return state != null && state.isAvailableOn(career.getCurrentDate());
+                    })
+                    .sorted(Comparator.comparingInt((Player player) -> PlayerOrdering.position(
+                            player.getPosition())).thenComparing(
+                            Comparator.comparingInt(Player::getOverall).reversed())).toList());
+            editorHint.setText("Once recomendado restaurado según GRL, forma y fitness.");
+            refreshEditor.run();
+        });
+        available.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                if (starters.getSelectionModel().getSelectedItem() == null) addStarter.fire();
+                else swap.fire();
+            }
+        });
+        available.setOnDragDetected(event -> {
+            Player selected = available.getSelectionModel().getSelectedItem();
+            if (selected == null) return;
+            javafx.scene.input.Dragboard dragboard = available.startDragAndDrop(
+                    javafx.scene.input.TransferMode.MOVE);
+            javafx.scene.input.ClipboardContent dragged = new javafx.scene.input.ClipboardContent();
+            dragged.putString(Long.toString(selected.getId()));
+            dragboard.setContent(dragged);
+            event.consume();
+        });
+        VBox squadEditor = panel("EDITOR DE CONVOCATORIA");
+        squadEditor.setMinWidth(390);
+        long unavailableCount = lineupStates.values().stream()
+                .filter(state -> !state.isAvailableOn(career.getCurrentDate())).count();
+        squadEditor.getChildren().addAll(count,
+                label(unavailableCount == 0 ? "Plantilla disponible al completo."
+                        : unavailableCount + " baja(s) médica(s) o disciplinaria(s) excluidas.",
+                        unavailableCount == 0 ? "success-feedback" : "warning-feedback"),
+                label("Haz clic en un jugador del campo para seleccionarlo. "
+                        + "También puedes arrastrar desde esta lista directamente al campo.",
+                        "muted-label"),
+                new FlowPane(8, 8, swap, addStarter, removeStarter),
+                label("RESTO DE LA PLANTILLA", "panel-title"), available,
+                new FlowPane(8, 8, toBench, toReserves, recommended), editorHint);
+        SplitPane pitch = new SplitPane(tacticalPitch, squadEditor);
+        pitch.setDividerPositions(0.56);
+        pitch.setMinHeight(410);
+        refreshEditor.run();
         Label feedback = label("El banquillo se gestiona explícitamente y admite siete jugadores.",
                 "muted-label");
         Button save = button("GUARDAR ALINEACIÓN", "primary-button");
         save.setOnAction(event -> {
             try {
                 validateFormation(java.util.List.copyOf(starters.getItems()),
-                        formation.getValue());
-                repository.save(nextMatch.getId(), teamId,
-                        java.util.List.copyOf(starters.getItems()),
-                        java.util.List.copyOf(substitutes.getItems()));
-                tacticsRepository.saveFormation(nextMatch.getId(), teamId, formation.getValue());
-                feedback.setText("Once y formación " + formation.getValue()
-                        + " guardados para este partido.");
+                        formation.getValue(), lineupStates);
+                var selectedStarters = java.util.List.copyOf(starters.getItems());
+                var selectedSubstitutes = available.getItems().stream()
+                        .filter(player -> benchIds.contains(player.getId())).limit(7).toList();
+                var setup = new MatchTacticsRepository.TacticalSetup(formation.getValue(),
+                        mentality.getValue(), pressing.getValue(), tempo.getValue());
+                var roles = new MatchRoleRepository.Assignment(captain.getValue().getId(),
+                        penalties.getValue().getId(), corners.getValue().getId());
+                repository.save(nextMatch.getId(), teamId, selectedStarters, selectedSubstitutes);
+                tacticsRepository.save(nextMatch.getId(), teamId, setup);
+                new MatchRoleRepository().save(nextMatch.getId(), teamId, roles);
+                new TeamSheetRepository().save(career.getId(), teamId,
+                        new TeamSheetRepository.Sheet(selectedStarters, selectedSubstitutes,
+                                setup, roles));
+                feedbackAnimator.confirmSave(save, feedback, "Once base " + formation.getValue()
+                        + " guardado a las " + java.time.LocalTime.now().format(
+                        java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                        + ". Titulares, banquillo, roles y táctica se reutilizarán.");
             } catch (IllegalArgumentException exception) {
                 feedback.setText(exception.getMessage());
+                feedback.setAccessibleText("No se pudo guardar la alineación");
+                animateFeedback(feedback, false);
             }
         });
         VBox.setVgrow(pitch, Priority.ALWAYS);
         FlowPane tacticalHeader = new FlowPane(12, 12,
                 label("FORMACIÓN", "panel-title"), formation,
-                label("Se guarda específicamente para el próximo partido.", "muted-label"));
-        content.getChildren().addAll(tacticalHeader, tacticalPitch, tacticalWarning,
+                label("MENTALIDAD", "panel-title"), mentality,
+                label("PRESIÓN", "panel-title"), pressing,
+                label("RITMO", "panel-title"), tempo);
+        FlowPane roleHeader = new FlowPane(12, 12,
+                label("CAPITÁN", "panel-title"), captain,
+                label("PENALTIS", "panel-title"), penalties,
+                label("CÓRNERS", "panel-title"), corners);
+        content.getChildren().addAll(tacticalHeader, roleHeader, tacticalWarning,
                 pitch, save, feedback);
         showCareerShell(stage, content);
     }
 
-    private String formationAssessment(java.util.List<Player> starters, String formation) {
+    private String tacticalRiskSummary(String mentality, String pressing, String tempo) {
+        String approach = switch (mentality) {
+            case "ATTACKING" -> "más amenaza, mayor exposición";
+            case "DEFENSIVE" -> "bloque protegido, menos llegada";
+            default -> "equilibrio entre líneas";
+        };
+        String pressure = "HIGH".equals(pressing) ? "presión intensa"
+                : "LOW".equals(pressing) ? "bloque bajo" : "presión media";
+        String pace = "FAST".equals(tempo) ? "transiciones rápidas"
+                : "SLOW".equals(tempo) ? "posesión paciente" : "ritmo normal";
+        return approach + "; " + pressure + "; " + pace;
+    }
+
+    private String formationAssessment(java.util.List<Player> starters, String formation,
+            java.util.Map<Long, PlayerState> states) {
         long goalkeepers = starters.stream().filter(player -> player.getPosition()
                 == footballcareer.model.enums.Position.GK).count();
         long defenders = starters.stream().filter(player -> java.util.Set.of(
@@ -1599,8 +2858,8 @@ public class Main extends Application {
                 footballcareer.model.enums.Position.RW).contains(player.getPosition())).count();
         long strikers = starters.stream().filter(player -> player.getPosition()
                 == footballcareer.model.enums.Position.ST).count();
-        long fatigued = starters.stream().map(player -> new PlayerStateRepository()
-                .findByPlayer(player.getId())).filter(java.util.Objects::nonNull)
+        long fatigued = starters.stream().map(player -> states.get(player.getId()))
+                .filter(java.util.Objects::nonNull)
                 .filter(state -> state.getFitness() < 70).count();
         boolean shapeFits = switch (formation) {
             case "4-2-3-1" -> holding >= 2 && advanced >= 3 && strikers >= 1;
@@ -1620,8 +2879,9 @@ public class Main extends Application {
                 : "Estructura correcta, pero hay " + fatigued + " titulares con fitness inferior a 70.";
     }
 
-    private void validateFormation(java.util.List<Player> starters, String formation) {
-        String assessment = formationAssessment(starters, formation);
+    private void validateFormation(java.util.List<Player> starters, String formation,
+            java.util.Map<Long, PlayerState> states) {
+        String assessment = formationAssessment(starters, formation, states);
         if (assessment.startsWith("DESAJUSTE")) throw new IllegalArgumentException(assessment);
     }
 
@@ -1686,11 +2946,85 @@ public class Main extends Application {
                     label(String.valueOf(player.getOverall()), "pitch-rating"));
             chip.setAlignment(Pos.CENTER);
             chip.getStyleClass().add("pitch-player");
+            chip.setUserData(player);
             Tooltip.install(chip, new Tooltip(player.getFullName() + "  •  GRL "
                     + player.getOverall()));
             line.getChildren().add(chip);
         }
         return line;
+    }
+
+    private void installPitchInteractions(VBox pitch, ListView<Player> starters,
+            ListView<Player> available, java.util.Set<Long> benchIds,
+            Runnable[] refreshEditorRef) {
+        pitch.setOnDragOver(event -> {
+            if (event.getGestureSource() != pitch && event.getDragboard().hasString()
+                    && starters.getItems().size() < 11) {
+                event.acceptTransferModes(javafx.scene.input.TransferMode.MOVE);
+            }
+            event.consume();
+        });
+        pitch.setOnDragDropped(event -> {
+            Player incoming = draggedPlayer(event.getDragboard(), available);
+            boolean completed = incoming != null && starters.getItems().size() < 11;
+            if (completed) {
+                available.getItems().remove(incoming);
+                benchIds.remove(incoming.getId());
+                starters.getItems().add(incoming);
+                if (refreshEditorRef[0] != null) refreshEditorRef[0].run();
+            }
+            event.setDropCompleted(completed);
+            event.consume();
+        });
+        for (Node rowNode : pitch.getChildren()) {
+            if (!(rowNode instanceof HBox row)) continue;
+            for (Node playerNode : row.getChildren()) {
+                if (!(playerNode.getUserData() instanceof Player outgoing)) continue;
+                Player selectedStarter = starters.getSelectionModel().getSelectedItem();
+                if (selectedStarter != null && selectedStarter.getId() == outgoing.getId())
+                    playerNode.getStyleClass().add("pitch-player-selected");
+                playerNode.setOnMouseClicked(event -> {
+                    starters.getSelectionModel().select(outgoing);
+                    pitch.getChildren().stream().filter(HBox.class::isInstance)
+                            .map(HBox.class::cast).flatMap(rowBox -> rowBox.getChildren().stream())
+                            .forEach(node -> node.getStyleClass().remove("pitch-player-selected"));
+                    playerNode.getStyleClass().add("pitch-player-selected");
+                    event.consume();
+                });
+                playerNode.setOnDragOver(event -> {
+                    if (event.getDragboard().hasString())
+                        event.acceptTransferModes(javafx.scene.input.TransferMode.MOVE);
+                    event.consume();
+                });
+                playerNode.setOnDragDropped(event -> {
+                    Player incoming = draggedPlayer(event.getDragboard(), available);
+                    boolean completed = incoming != null;
+                    if (completed) {
+                        int slot = starters.getItems().indexOf(outgoing);
+                        starters.getItems().set(slot, incoming);
+                        available.getItems().remove(incoming);
+                        available.getItems().add(outgoing);
+                        if (benchIds.remove(incoming.getId())) benchIds.add(outgoing.getId());
+                        starters.getSelectionModel().select(slot);
+                        if (refreshEditorRef[0] != null) refreshEditorRef[0].run();
+                    }
+                    event.setDropCompleted(completed);
+                    event.consume();
+                });
+            }
+        }
+    }
+
+    private Player draggedPlayer(javafx.scene.input.Dragboard dragboard,
+            ListView<Player> available) {
+        if (!dragboard.hasString()) return null;
+        try {
+            long playerId = Long.parseLong(dragboard.getString());
+            return available.getItems().stream()
+                    .filter(player -> player.getId() == playerId).findFirst().orElse(null);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 
     private void showSettings(Stage stage) {
@@ -1716,8 +3050,277 @@ public class Main extends Application {
         FlowPane screenActions = new FlowPane(12, 12, fullscreen, windowed);
         display.getChildren().addAll(mode, screenActions,
                 label("También puedes usar F11 para alternar el modo de pantalla.", "muted-label"));
-        content.getChildren().add(display);
+        CareerPreferencesRepository repository = new CareerPreferencesRepository();
+        CareerPreferencesRepository.Preferences saved = repository.find(career.getId());
+        VBox progression = panel("AVANCE E INTERRUPCIONES");
+        CheckBox stopAtMatch = new CheckBox("Detenerse cuando llegue un partido del equipo");
+        CheckBox stopOnOffer = new CheckBox("Detenerse cuando llegue una nueva oferta");
+        CheckBox stopOnFatigue = new CheckBox("Detenerse si cuatro jugadores están fatigados");
+        stopAtMatch.setSelected(saved.stopAtMatch());
+        stopOnOffer.setSelected(saved.stopOnOffer());
+        stopOnFatigue.setSelected(saved.stopOnFatigue());
+        ComboBox<String> assistance = new ComboBox<>();
+        assistance.getItems().addAll("GUIDED", "STANDARD", "EXPERT");
+        assistance.setValue(saved.assistanceLevel());
+        ComboBox<String> difficulty = new ComboBox<>();
+        difficulty.getItems().addAll("CASUAL", "NORMAL", "HARD", "LEGENDARY");
+        difficulty.setValue(saved.difficulty());
+        ComboBox<String> identity = new ComboBox<>();
+        identity.getItems().addAll("GENERALIST", "TACTICIAN", "DEVELOPER", "MOTIVATOR");
+        identity.setValue(saved.managerIdentity());
+        Label savedFeedback = label("Estas preferencias son exclusivas de esta carrera.",
+                "muted-label");
+        Button savePreferences = button("GUARDAR PREFERENCIAS", "primary-button");
+        savePreferences.setOnAction(event -> {
+            repository.save(career.getId(), new CareerPreferencesRepository.Preferences(
+                    stopAtMatch.isSelected(), stopOnOffer.isSelected(),
+                    stopOnFatigue.isSelected(), assistance.getValue(), difficulty.getValue(),
+                    identity.getValue()));
+            savedFeedback.setText("Preferencias guardadas correctamente.");
+            animateFeedback(savedFeedback, true);
+        });
+        progression.getChildren().addAll(stopAtMatch, stopOnOffer, stopOnFatigue,
+                new FlowPane(10, 10, label("ASISTENCIA", "objective-title"), assistance),
+                new FlowPane(10, 10, label("DIFICULTAD", "objective-title"), difficulty),
+                new FlowPane(10, 10, label("IDENTIDAD", "objective-title"), identity),
+                label("Guiado muestra referencias; estándar reduce ayudas; experto evita pistas de negociación.",
+                        "muted-label"), savePreferences, savedFeedback);
+        VBox diagnostics = panel("DIAGNÓSTICO");
+        ListView<AppDiagnostics.Entry> errors = new ListView<>();
+        errors.getStyleClass().add("data-list");
+        errors.setPrefHeight(180);
+        errors.setCellFactory(view -> new ListCell<>() {
+            @Override protected void updateItem(AppDiagnostics.Entry entry, boolean empty) {
+                super.updateItem(entry, empty);
+                setText(empty || entry == null ? null : entry.time() + "  •  "
+                        + entry.context() + "  •  " + entry.type() + "  •  " + entry.message());
+            }
+        });
+        errors.getItems().addAll(AppDiagnostics.recent());
+        errors.setPlaceholder(label("No se han detectado errores durante esta ejecución.",
+                "success-feedback"));
+        Button clearDiagnostics = button("LIMPIAR LISTA", "ghost-button");
+        clearDiagnostics.setOnAction(event -> {
+            AppDiagnostics.clearMemory();
+            errors.getItems().clear();
+        });
+        diagnostics.getChildren().addAll(
+                label("ARCHIVO DE REGISTRO", "objective-title"),
+                label(AppDiagnostics.logPath().toString(), "comparison-label"), errors,
+                label("La lista puede limpiarse, pero el archivo conserva el historial para investigar fallos.",
+                        "muted-label"), clearDiagnostics);
+        content.getChildren().addAll(display, progression, diagnostics);
         showCareerShell(stage, content);
+    }
+
+    private void showOffice(Stage stage) {
+        activeSection = "office";
+        ClubFinance finance = new ClubFinanceRepository()
+                .findByTeam(career.getControlledTeam().getId());
+        VBox content = page("OFICINA DEL MÁNAGER",
+                "Directiva, objetivos y control económico del club");
+        ManagerEvaluationService.Evaluation evaluation = new ManagerEvaluationService()
+                .evaluate(career);
+        FlowPane overview = new FlowPane(16, 16,
+                statCard("CONFIANZA", evaluation.confidence() + "/100  " + evaluation.status()),
+                statCard("POSICIÓN", leaguePositionSummary()),
+                statCard("REPUTACIÓN", String.valueOf(
+                        career.getControlledTeam().getReputation())),
+                finance == null ? statCard("BALANCE", "SIN DATOS")
+                        : statCard("BALANCE", String.format("€%.1fM",
+                        finance.getBalance() / 1_000_000)));
+        overview.getChildren().forEach(node -> {
+            if (node instanceof Region region) region.setPrefWidth(210);
+        });
+
+        CareerInsightService insights = new CareerInsightService();
+        VBox objectives = panel("EXPECTATIVAS DE LA DIRECTIVA");
+        insights.objectives(career).forEach(objective -> {
+            Label status = label(switch (objective.status()) {
+                case ON_TRACK -> "EN OBJETIVO";
+                case AT_RISK -> "EN RIESGO";
+                case PENDING -> "PENDIENTE";
+            }, switch (objective.status()) {
+                case ON_TRACK -> "objective-good";
+                case AT_RISK -> "objective-risk";
+                case PENDING -> "objective-pending";
+            });
+            VBox description = new VBox(4, label(objective.title(), "objective-title"),
+                    label(objective.detail(), "muted-label"));
+            HBox row = new HBox(14, status, description);
+            row.setAlignment(Pos.CENTER_LEFT);
+            row.getStyleClass().add("objective-row");
+            objectives.getChildren().add(row);
+        });
+
+        VBox finances = panel("PRESUPUESTOS");
+        if (finance == null) {
+            finances.getChildren().add(label("No hay información financiera disponible.",
+                    "muted-label"));
+        } else {
+            finances.getChildren().addAll(
+                    officeBudgetRow("FICHAJES", finance.getTransferBudget(),
+                            Math.max(finance.getTransferBudget(), finance.getBalance())),
+                    officeBudgetRow("SALARIOS DISPONIBLES", finance.getAvailableWageBudget(),
+                            finance.getWageBudget()),
+                    officeBudgetRow("GASTO SALARIAL", finance.getCurrentWageSpend(),
+                            finance.getWageBudget()));
+        }
+        HBox columns = new HBox(18, objectives, finances);
+        HBox.setHgrow(objectives, Priority.ALWAYS);
+        HBox.setHgrow(finances, Priority.ALWAYS);
+        objectives.setMaxWidth(Double.MAX_VALUE);
+        finances.setMaxWidth(Double.MAX_VALUE);
+
+        VBox messages = panel("BANDEJA DE LA DIRECTIVA");
+        if (evaluation.reasons().isEmpty()) messages.getChildren().add(
+                label("La directiva considera estable la marcha del proyecto.", "body-label"));
+        else evaluation.reasons().forEach(reason -> messages.getChildren().add(
+                label("•  " + reason, evaluation.dismissalRisk()
+                        ? "warning-feedback" : "body-label")));
+        if (evaluation.dismissalRisk()) messages.getChildren().add(label(
+                "AVISO: tu puesto corre peligro si no reviertes la situación.",
+                "warning-feedback"));
+
+        VBox dressingRoom = panel("VESTUARIO");
+        java.util.List<SquadDynamicsService.Concern> concerns = new SquadDynamicsService()
+                .concerns(career.getControlledTeam().getId());
+        if (concerns.isEmpty()) dressingRoom.getChildren().add(
+                label("No existen conflictos relevantes en la plantilla.", "body-label"));
+        else concerns.stream().limit(6).forEach(concern -> dressingRoom.getChildren().add(
+                label(concern.player().getFullName() + "  •  " + concern.role()
+                        + "  •  Moral " + concern.morale() + "  •  " + concern.message(),
+                        concern.morale() < 30 ? "warning-feedback" : "body-label")));
+        YouthAcademyService academyService = new YouthAcademyService();
+        YouthAcademyService.Scout scout = academyService.findScout(career.getId());
+        VBox academy = panel("CANTERA Y OJEADORES");
+        Label academyStatus = label(scout == null
+                ? "No tienes un ojeador de cantera contratado."
+                : scout.name() + "  •  Calidad " + scout.quality() + "/5  •  Desde "
+                + scout.hiredDate(), scout == null ? "warning-feedback" : "success-feedback");
+        TextField scoutName = new TextField(scout == null ? "Director de cantera" : scout.name());
+        scoutName.setPromptText("Nombre del ojeador");
+        ComboBox<Integer> scoutQuality = new ComboBox<>();
+        scoutQuality.getItems().addAll(1, 2, 3, 4, 5);
+        scoutQuality.setValue(scout == null ? 3 : scout.quality());
+        Label scoutCost = label("", "comparison-label");
+        Runnable refreshScoutCost = () -> scoutCost.setText(String.format(
+                "Coste de contratación: €%.2fM",
+                YouthAcademyService.hiringCost(scoutQuality.getValue()) / 1_000_000));
+        scoutQuality.setOnAction(event -> refreshScoutCost.run());
+        refreshScoutCost.run();
+        Button hireScout = button(scout == null ? "CONTRATAR OJEADOR" : "CAMBIAR OJEADOR",
+                "secondary-button");
+        hireScout.setOnAction(event -> {
+            try {
+                academyService.hireScout(career, scoutName.getText(), scoutQuality.getValue());
+                showOffice(stage);
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                showMessage("NO SE PUDO CONTRATAR", exception.getMessage());
+            }
+        });
+        ListView<YouthAcademyService.Prospect> prospects = new ListView<>();
+        prospects.setCellFactory(list -> new ListCell<>() {
+            @Override protected void updateItem(YouthAcademyService.Prospect item,
+                    boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.position() + "  •  "
+                        + item.fullName() + "  •  GRL " + item.overall()
+                        + "  •  POT " + item.potential() + "  •  "
+                        + item.birthDate().getYear());
+            }
+        });
+        prospects.getItems().addAll(academyService.findCandidates(career.getId()));
+        prospects.setPrefHeight(190);
+        Button requestReport = button("SOLICITAR INFORME", "primary-button");
+        requestReport.setDisable(scout == null);
+        requestReport.setOnAction(event -> {
+            try {
+                academyService.generateReport(career);
+                showOffice(stage);
+            } catch (IllegalStateException exception) {
+                showMessage("INFORME NO DISPONIBLE", exception.getMessage());
+            }
+        });
+        Button promote = button("PROMOCIONAR AL PRIMER EQUIPO", "secondary-button");
+        promote.setDisable(true);
+        prospects.getSelectionModel().selectedItemProperty().addListener(
+                (observable, previous, selected) -> promote.setDisable(selected == null));
+        promote.setOnAction(event -> {
+            YouthAcademyService.Prospect selected = prospects.getSelectionModel()
+                    .getSelectedItem();
+            if (selected == null) return;
+            Player promoted = academyService.promote(career, selected.id());
+            showMessage("JUVENIL PROMOCIONADO", promoted.getFullName()
+                    + " ya forma parte de la plantilla profesional.", () -> showOffice(stage));
+        });
+        academy.getChildren().addAll(academyStatus,
+                new FlowPane(10, 10, scoutName, scoutQuality, hireScout), scoutCost,
+                label("INFORMES DE JUVENILES", "objective-title"), prospects,
+                new FlowPane(10, 10, requestReport, promote));
+        StaffService staffService = new StaffService();
+        java.util.Map<StaffService.Role, StaffService.Staff> employees =
+                staffService.findAll(career.getId());
+        HBox staffCards = new HBox(12);
+        for (StaffService.Role role : StaffService.Role.values()) {
+            VBox card = staffCard(stage, staffService, role, employees.get(role));
+            HBox.setHgrow(card, Priority.ALWAYS);
+            card.setMaxWidth(Double.MAX_VALUE);
+            staffCards.getChildren().add(card);
+        }
+        VBox technicalStaff = panel("CUERPO TÉCNICO");
+        technicalStaff.getChildren().addAll(label(
+                "El preparador mejora sesiones, el fisio acelera recuperaciones y el analista amplía la previa.",
+                "muted-label"), staffCards);
+        content.getChildren().addAll(overview, columns, messages, dressingRoom, academy,
+                technicalStaff);
+        showCareerShell(stage, content);
+    }
+
+    private VBox staffCard(Stage stage, StaffService service, StaffService.Role role,
+            StaffService.Staff current) {
+        String title = switch (role) {
+            case COACH -> "PREPARADOR";
+            case PHYSIO -> "FISIOTERAPEUTA";
+            case ANALYST -> "ANALISTA";
+        };
+        TextField name = new TextField(current == null ? "" : current.name());
+        name.setPromptText("Nombre");
+        ComboBox<Integer> level = new ComboBox<>();
+        level.getItems().addAll(1, 2, 3, 4, 5);
+        level.setValue(current == null ? 2 : current.level());
+        Label cost = label("", "comparison-label");
+        Runnable refresh = () -> cost.setText(String.format("Nivel %d  •  Coste €%.2fM",
+                level.getValue(), StaffService.hiringCost(level.getValue()) / 1_000_000));
+        level.setOnAction(event -> refresh.run());
+        refresh.run();
+        Button hire = button(current == null ? "CONTRATAR" : "SUSTITUIR", "secondary-button");
+        hire.setOnAction(event -> {
+            try {
+                service.hire(career, role, name.getText(), level.getValue());
+                showOffice(stage);
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                showMessage("CONTRATACIÓN FALLIDA", exception.getMessage());
+            }
+        });
+        VBox card = new VBox(8, label(title, "objective-title"),
+                label(current == null ? "Vacante" : current.name() + "  •  Nivel "
+                        + current.level(), current == null ? "warning-feedback" : "success-feedback"),
+                name, level, cost, hire);
+        card.getStyleClass().add("training-card");
+        return card;
+    }
+
+    private HBox officeBudgetRow(String title, double value, double maximum) {
+        double safeMaximum = Math.max(1, maximum);
+        ProgressBar bar = new ProgressBar(Math.max(0, Math.min(1, value / safeMaximum)));
+        bar.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(bar, Priority.ALWAYS);
+        Label amount = label(String.format("€%.1fM", value / 1_000_000), "budget-value");
+        HBox row = new HBox(14, label(title, "budget-title"), bar, amount);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("budget-row");
+        return row;
     }
 
     private void addAttribute(GridPane grid, int row, String leftName,
@@ -1745,13 +3348,6 @@ public class Main extends Application {
                         == career.getCurrentSeason().getId()).toList();
     }
 
-    private VBox financeCard() {
-        ClubFinance finance = new ClubFinanceRepository()
-                .findByTeam(career.getControlledTeam().getId());
-        return statCard("PRESUPUESTO", finance == null ? "—"
-                : String.format("€%.1fM", finance.getTransferBudget() / 1_000_000));
-    }
-
     private Match findNextMatch() {
         return new CompetitionTeamRepository()
                 .findCompetitionsByTeam(career.getControlledTeam().getId()).stream()
@@ -1774,6 +3370,7 @@ public class Main extends Application {
     private void showMatchPreview(Stage stage, Match match) {
         long controlledTeamId = career.getControlledTeam().getId();
         PlayerStateRepository states = new PlayerStateRepository();
+        java.util.Map<Long, PlayerState> allStates = states.findAll();
         LineupService lineups = new LineupService(new PlayerRepository(), states);
         MatchLineup home = lineups.selectMatchLineup(match.getId(), match.getHomeTeam().getId());
         MatchLineup away = lineups.selectMatchLineup(match.getId(), match.getAwayTeam().getId());
@@ -1782,9 +3379,10 @@ public class Main extends Application {
         String awayFormation = tactics.findFormation(match.getId(), match.getAwayTeam().getId());
         VBox content = page("PREVIA DEL PARTIDO", match.getCompetition().getName() + "  •  "
                 + match.getDate() + "  •  " + match.getHomeTeam().getStadiumName());
-        VBox homePanel = previewTeam(match.getHomeTeam(), home, homeFormation, states,
+        int analystLevel = new StaffService().level(career.getId(), StaffService.Role.ANALYST);
+        VBox homePanel = previewTeam(match.getHomeTeam(), home, homeFormation, allStates,
                 match.getHomeTeam().getId() == controlledTeamId);
-        VBox awayPanel = previewTeam(match.getAwayTeam(), away, awayFormation, states,
+        VBox awayPanel = previewTeam(match.getAwayTeam(), away, awayFormation, allStates,
                 match.getAwayTeam().getId() == controlledTeamId);
         VBox versus = new VBox(8, label("VS", "versus"),
                 label("Todo preparado", "match-countdown"));
@@ -1797,16 +3395,24 @@ public class Main extends Application {
         lineup.setOnAction(event -> showLineup(stage));
         Button start = button("SIMULAR PARTIDO", "primary-button");
         start.setOnAction(event -> showLiveMatch(stage, match));
+        MatchLineup rivalLineup = match.getHomeTeam().getId() == controlledTeamId ? away : home;
+        String rivalFormation = match.getHomeTeam().getId() == controlledTeamId
+                ? awayFormation : homeFormation;
+        if (analystLevel > 0) content.getChildren().add(label(
+                "INFORME DEL ANALISTA  •  Nivel " + analystLevel
+                        + "  •  Rival observado: formación " + rivalFormation
+                        + ", once medio " + String.format("%.1f", rivalLineup.getStarters().stream()
+                        .mapToInt(Player::getOverall).average().orElse(0)), "success-feedback"));
         content.getChildren().addAll(matchup, new FlowPane(12, 12, lineup, start));
         showCareerShell(stage, new ScrollPane(content));
     }
 
     private VBox previewTeam(Team team, MatchLineup lineup, String formation,
-            PlayerStateRepository states, boolean controlled) {
+            java.util.Map<Long, PlayerState> states, boolean controlled) {
         double average = lineup.getStarters().stream().mapToInt(Player::getOverall)
                 .average().orElse(0);
         double fitness = lineup.getStarters().stream()
-                .map(player -> states.findByPlayer(player.getId()))
+                .map(player -> states.get(player.getId()))
                 .filter(java.util.Objects::nonNull).mapToInt(PlayerState::getFitness)
                 .average().orElse(0);
         VBox players = new VBox(5);
@@ -1823,19 +3429,29 @@ public class Main extends Application {
     }
 
     private void showLiveMatch(Stage stage, Match pendingMatch) {
-        careerService.simulateControlledMatchesToday(career);
-        MatchReport report = new MatchReportService().build(pendingMatch.getId());
-        Match match = report.getMatch();
+        IncrementalLiveMatchService.Session liveSession =
+                new IncrementalLiveMatchService().start(pendingMatch.getId());
+        Match match = liveSession.match();
         VBox content = page("PARTIDO EN DIRECTO", match.getDate().toString());
         Label minute = label("0'", "live-minute");
         Label score = label(match.getHomeTeam().getShortName() + "  0 — 0  "
                 + match.getAwayTeam().getShortName(), "score-number");
         VBox eventFeed = panel("ACCIONES");
+        LiveMatchPitchView livePitch = new LiveMatchPitchView(
+                match.getHomeTeam().getShortName(), match.getAwayTeam().getShortName());
+        Label possession = label("50%  POSESIÓN  50%", "live-stat-main");
+        Label shots = label("0  TIROS  0", "live-stat-row");
+        Label onTarget = label("0  A PUERTA  0", "live-stat-row");
+        Label cards = label("0  TARJETAS  0", "live-stat-row");
+        VBox liveStats = panel("ESTADÍSTICAS EN VIVO");
+        liveStats.setAlignment(Pos.CENTER);
+        liveStats.getChildren().addAll(possession, shots, onTarget, cards);
         Button reportButton = button("VER INFORME COMPLETO", "primary-button");
         reportButton.setDisable(true);
         reportButton.setOnAction(event -> showMatchReport(stage, match));
         Button pause = button("PAUSAR", "secondary-button");
         Button finish = button("IR AL FINAL", "ghost-button");
+        Button substitution = button("HACER CAMBIO", "secondary-button");
         ComboBox<String> speed = new ComboBox<>();
         speed.getItems().addAll("0.5x", "1x", "2x", "4x");
         speed.setValue("1x");
@@ -1846,16 +3462,85 @@ public class Main extends Application {
         int[] currentMinute = {0};
         int[] homeGoals = {0};
         int[] awayGoals = {0};
+        int[] substitutionsMade = {0};
+        long controlledTeamId = career.getControlledTeam().getId();
+        boolean controlledAtHome = match.getHomeTeam().getId() == controlledTeamId;
+        LiveMatchNarrator narrator = new LiveMatchNarrator();
+        LiveTacticalMomentumService momentumService = new LiveTacticalMomentumService();
+        MatchTacticsRepository.TacticalSetup initialTactics =
+                liveSession.tactics(controlledTeamId);
+        ComboBox<String> mentality = new ComboBox<>(); mentality.getItems().addAll(
+                "DEFENSIVE", "BALANCED", "ATTACKING");
+        mentality.setValue(initialTactics.mentality());
+        ComboBox<String> pressing = new ComboBox<>(); pressing.getItems().addAll(
+                "LOW", "MEDIUM", "HIGH");
+        pressing.setValue(initialTactics.pressing());
+        ComboBox<String> tempo = new ComboBox<>();
+        tempo.getItems().addAll("SLOW", "NORMAL", "FAST");
+        tempo.setValue(initialTactics.tempo());
+        Label tacticalReading = label("", "tactical-reading");
+        ProgressBar momentumBar = new ProgressBar(); momentumBar.setMaxWidth(Double.MAX_VALUE);
+        Button applyTactics = button("APLICAR INSTRUCCIONES", "secondary-button");
+        VBox tacticalCenter = panel("CENTRO TÁCTICO"); tacticalCenter.getStyleClass().add("live-tactical-center");
+        tacticalCenter.getChildren().addAll(new FlowPane(10, 10, mentality, pressing,
+                tempo, applyTactics), momentumBar, tacticalReading);
+        Runnable refreshTacticalReading = () -> {
+            int controlledGoals = controlledAtHome ? homeGoals[0] : awayGoals[0];
+            int rivalGoals = controlledAtHome ? awayGoals[0] : homeGoals[0];
+            var setup = new MatchTacticsRepository.TacticalSetup(initialTactics.formation(),
+                    mentality.getValue(), pressing.getValue(), tempo.getValue());
+            var assessment = momentumService.assess(setup, currentMinute[0],
+                    controlledGoals - rivalGoals);
+            momentumBar.setProgress((assessment.momentum() + 50) / 100.0);
+            tacticalReading.setText(assessment.label() + "  •  " + assessment.risk()
+                    + "  •  Impulso " + (assessment.momentum() >= 0 ? "+" : "")
+                    + assessment.momentum());
+        };
+        refreshTacticalReading.run();
+        applyTactics.setOnAction(event -> {
+            var setup = new MatchTacticsRepository.TacticalSetup(initialTactics.formation(),
+                    mentality.getValue(), pressing.getValue(), tempo.getValue());
+            liveSession.updateTactics(controlledTeamId, setup);
+            refreshTacticalReading.run();
+            Label instruction = label(Math.max(1, currentMinute[0])
+                    + "'  INDICACIÓN  •  " + mentality.getValue() + " / "
+                    + pressing.getValue() + " / " + tempo.getValue(),
+                    "live-event-commentary");
+            HBox row = new HBox(instruction);
+            row.getStyleClass().addAll("live-event-row", "live-event-tactics");
+            eventFeed.getChildren().add(row);
+        });
+        MatchLineup controlledLineup = liveSession.lineup(controlledTeamId);
+        java.util.List<Player> liveStarters = controlledLineup == null
+                ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(controlledLineup.getStarters());
+        java.util.List<Player> liveSubstitutes = controlledLineup == null
+                ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(controlledLineup.getSubstitutes());
+        java.util.List<MatchEvent> liveEvents = new java.util.ArrayList<>();
         java.util.Set<Long> revealed = new java.util.HashSet<>();
-        PlayerRepository playerRepository = new PlayerRepository();
-        java.util.function.IntConsumer revealUntil = targetMinute -> report.getEvents().stream()
+        java.util.function.IntConsumer revealUntil = targetMinute -> {
+            liveEvents.addAll(liveSession.advanceTo(targetMinute));
+            liveEvents.stream()
                 .filter(matchEvent -> matchEvent.getMinute() <= targetMinute)
                 .filter(matchEvent -> revealed.add(matchEvent.getId()))
                 .forEach(matchEvent -> {
-                    Player player = playerRepository.findById(matchEvent.getPlayer().getId());
-                    eventFeed.getChildren().add(label(matchEvent.getMinute() + "'  "
-                            + eventLabel(matchEvent.getType()) + "  •  "
-                            + player.getFullName(), "event-row"));
+                    Player player = matchEvent.getPlayer();
+                    Player secondary = matchEvent.getSecondaryPlayer();
+                    Label badge = label(matchEvent.getMinute() + "'",
+                            "live-event-minute");
+                    boolean homeEvent = matchEvent.getTeam().getId()
+                            == match.getHomeTeam().getId();
+                    Label commentary = label(narrator.describe(matchEvent, player, secondary,
+                                    homeGoals[0], awayGoals[0], homeEvent),
+                            "live-event-commentary");
+                    HBox eventRow = new HBox(12, badge, commentary);
+                    eventRow.setAlignment(Pos.CENTER_LEFT);
+                    eventRow.getStyleClass().add("live-event-row");
+                    eventRow.getStyleClass().add("live-event-"
+                            + matchEvent.getType().name().toLowerCase());
+                    eventFeed.getChildren().add(eventRow);
+                    livePitch.show(matchEvent, homeEvent);
                     if (matchEvent.getType()
                             == footballcareer.model.enums.MatchEventType.GOAL) {
                         if (matchEvent.getTeam().getId() == match.getHomeTeam().getId())
@@ -1866,8 +3551,26 @@ public class Main extends Application {
                                 + match.getAwayTeam().getShortName());
                     }
                 });
+        };
+        java.util.function.IntConsumer updateLiveStats = targetMinute -> {
+            int homePossession = liveSession.homeStats().getPossession();
+            possession.setText(homePossession + "%  POSESIÓN  "
+                    + (100 - homePossession) + "%");
+            shots.setText(liveSession.homeStats().getShots()
+                    + "  TIROS  " + liveSession.awayStats().getShots());
+            onTarget.setText(liveSession.homeStats().getShotsOnTarget()
+                    + "  A PUERTA  "
+                    + liveSession.awayStats().getShotsOnTarget());
+            int homeCards = liveSession.homeStats().getYellowCards()
+                    + liveSession.homeStats().getRedCards();
+            int awayCards = liveSession.awayStats().getYellowCards()
+                    + liveSession.awayStats().getRedCards();
+            cards.setText(homeCards + "  TARJETAS  " + awayCards);
+        };
         Runnable showFinal = () -> {
             revealUntil.accept(90);
+            liveSession.finish();
+            updateLiveStats.accept(90);
             currentMinute[0] = 90;
             minute.setText("FINAL");
             score.setText(match.getHomeTeam().getShortName() + "  "
@@ -1876,6 +3579,11 @@ public class Main extends Application {
             pause.setDisable(true);
             finish.setDisable(true);
             speed.setDisable(true);
+            substitution.setDisable(true);
+            applyTactics.setDisable(true);
+            mentality.setDisable(true);
+            pressing.setDisable(true);
+            tempo.setDisable(true);
             reportButton.setDisable(false);
         };
         javafx.animation.Timeline timeline = new javafx.animation.Timeline(
@@ -1883,9 +3591,28 @@ public class Main extends Application {
                     currentMinute[0] = Math.min(90, currentMinute[0] + 2);
                     minute.setText(currentMinute[0] + "'");
                     revealUntil.accept(currentMinute[0]);
+                    updateLiveStats.accept(currentMinute[0]);
+                    refreshTacticalReading.run();
                 }));
         timeline.setCycleCount(45);
         timeline.setOnFinished(event -> showFinal.run());
+        substitution.setDisable(controlledLineup == null || liveSubstitutes.isEmpty());
+        substitution.setOnAction(event -> {
+            timeline.pause();
+            pause.setText("REANUDAR");
+            showSubstitutionOverlay(match, liveStarters, liveSubstitutes, currentMinute[0],
+                    substitutionsMade[0], completed -> {
+                        substitutionsMade[0]++;
+                        liveSession.recordSubstitution(controlledTeamId, liveStarters,
+                                liveSubstitutes, completed);
+                        liveEvents.add(completed);
+                        revealUntil.accept(Math.max(1, currentMinute[0]));
+                        if (substitutionsMade[0] >= 3
+                                || liveSubstitutes.isEmpty()) {
+                            substitution.setDisable(true);
+                        }
+                    });
+        });
         pause.setOnAction(event -> {
             if (timeline.getStatus() == javafx.animation.Animation.Status.RUNNING) {
                 timeline.pause();
@@ -1898,13 +3625,75 @@ public class Main extends Application {
         speed.setOnAction(event -> timeline.setRate(Double.parseDouble(
                 speed.getValue().replace("x", ""))));
         finish.setOnAction(event -> { timeline.stop(); showFinal.run(); });
-        content.getChildren().addAll(livePanel,
-                new FlowPane(12, 12, pause, speed, finish), eventFeed, reportButton);
+        HBox liveOverview = new HBox(16, livePanel, liveStats);
+        HBox.setHgrow(livePanel, Priority.ALWAYS);
+        HBox.setHgrow(liveStats, Priority.ALWAYS);
+        livePanel.setMaxWidth(Double.MAX_VALUE);
+        liveStats.setMaxWidth(Double.MAX_VALUE);
+        content.getChildren().addAll(liveOverview, livePitch.node(),
+                new FlowPane(12, 12, pause, speed, substitution, finish), tacticalCenter,
+                eventFeed, reportButton);
         showCareerShell(stage, content);
         activeAnimation = timeline;
         timeline.play();
     }
 
+    private void showSubstitutionOverlay(Match match, java.util.List<Player> starters,
+            java.util.List<Player> substitutes, int currentMinute,
+            int substitutionsMade, java.util.function.Consumer<MatchEvent> completed) {
+        if (substitutionsMade >= 3) {
+            showMessage("CAMBIOS AGOTADOS", "Ya has realizado los tres cambios permitidos.");
+            return;
+        }
+        ComboBox<Player> outgoing = new ComboBox<>();
+        ComboBox<Player> incoming = new ComboBox<>();
+        outgoing.getItems().addAll(starters);
+        incoming.getItems().addAll(substitutes);
+        outgoing.setConverter(playerStringConverter());
+        incoming.setConverter(playerStringConverter());
+        if (!outgoing.getItems().isEmpty()) outgoing.setValue(outgoing.getItems().getFirst());
+        if (!incoming.getItems().isEmpty()) incoming.setValue(incoming.getItems().getFirst());
+        Label feedback = label("El cambio quedará registrado en el informe del partido.",
+                "muted-label");
+        Button confirm = button("CONFIRMAR CAMBIO", "primary-button");
+        Button cancel = button("CANCELAR", "ghost-button");
+        VBox dialog = new VBox(14, label("SUSTITUCIÓN", "form-title"),
+                label("Minuto " + Math.max(1, currentMinute) + "  •  Cambio "
+                        + (substitutionsMade + 1) + " de 3", "comparison-label"),
+                label("SALE", "objective-title"), outgoing,
+                label("ENTRA", "objective-title"), incoming, feedback,
+                new FlowPane(10, 10, confirm, cancel));
+        dialog.getStyleClass().add("in-app-dialog");
+        dialog.setPrefWidth(500);
+        Runnable close = showOverlay(dialog);
+        cancel.setOnAction(event -> close.run());
+        confirm.setOnAction(event -> {
+            Player leaving = outgoing.getValue();
+            Player entering = incoming.getValue();
+            if (leaving == null || entering == null) {
+                feedback.setText("Selecciona el jugador que sale y el que entra.");
+                animateFeedback(feedback, false);
+                return;
+            }
+            int slot = starters.indexOf(leaving);
+            starters.set(slot, entering);
+            substitutes.remove(entering);
+            substitutes.add(leaving);
+            MatchEvent change = new MatchEvent();
+            change.setMatch(match);
+            change.setTeam(career.getControlledTeam());
+            change.setPlayer(leaving);
+            change.setSecondaryPlayer(entering);
+            change.setMinute(Math.max(1, currentMinute));
+            change.setType(footballcareer.model.enums.MatchEventType.SUBSTITUTION);
+            close.run();
+            completed.accept(change);
+        });
+    }
+    private boolean restoreRetainedScreen(Stage stage, String screen) { Node content =
+            retainedScreens.take(screen, career.getCurrentDate()); if (content == null) return false;
+        showCareerShell(stage, content); return true;
+    }
     private VBox page(String title, String subtitle) {
         VBox heading = new VBox(5, label(title, "page-title"), label(subtitle, "page-subtitle"));
         heading.getStyleClass().add("page-header");
@@ -1931,6 +3720,7 @@ public class Main extends Application {
         task.setOnSucceeded(event -> onSuccess.accept(task.getValue()));
         task.setOnFailed(event -> {
             Throwable failure = task.getException();
+            AppDiagnostics.record(failure, "background-operation");
             VBox card = formCard("NO SE PUDO COMPLETAR LA OPERACIÓN",
                     failure == null || failure.getMessage() == null
                             ? "Ha ocurrido un error inesperado."
@@ -1968,19 +3758,7 @@ public class Main extends Application {
     }
 
     private ScrollPane scrollableCentered(Node node, String rootStyle) {
-        VBox holder = new VBox(node);
-        holder.setFillWidth(false);
-        holder.setAlignment(Pos.CENTER);
-        StackPane canvas = new StackPane(holder);
-        canvas.getStyleClass().add(rootStyle);
-        canvas.setPadding(new Insets(32));
-        canvas.setMinSize(0, 0);
-        ScrollPane scroll = new ScrollPane(canvas);
-        scroll.setFitToWidth(true);
-        scroll.setFitToHeight(true);
-        scroll.setPannable(true);
-        scroll.getStyleClass().add("screen-scroll");
-        return scroll;
+        return responsiveContainer.centered(node, rootStyle);
     }
 
     private Label label(String text, String style) {
@@ -1993,6 +3771,7 @@ public class Main extends Application {
     private Button button(String text, String style) {
         Button button = new Button(text);
         button.getStyleClass().add(style);
+        button.setTooltip(new Tooltip(text));
         return button;
     }
 
@@ -2000,22 +3779,6 @@ public class Main extends Application {
         Button button = button(text, style);
         button.setMaxWidth(Double.MAX_VALUE);
         return button;
-    }
-
-    private Button navButton(String text, String section) {
-        Button button = wideButton(text, "nav-button");
-        if (section.equals(activeSection)) button.getStyleClass().add("nav-button-active");
-        return button;
-    }
-
-    private ListCell<Team> teamCell() {
-        return new ListCell<>() {
-            @Override protected void updateItem(Team team, boolean empty) {
-                super.updateItem(team, empty);
-                setText(empty || team == null ? null
-                        : team.getName() + "  •  " + team.getCountry());
-            }
-        };
     }
 
     private ListCell<Competition> competitionCell() {
@@ -2041,6 +3804,30 @@ public class Main extends Application {
         return list;
     }
 
+    private ListView<Player> lineupAvailableList(java.util.Set<Long> benchIds) {
+        java.util.Map<Long, PlayerState> states = new PlayerStateRepository().findAll();
+        ListView<Player> list = new ListView<>();
+        list.setCellFactory(view -> new ListCell<>() {
+            @Override protected void updateItem(Player player, boolean empty) {
+                super.updateItem(player, empty);
+                getStyleClass().removeAll("lineup-bench-cell", "lineup-reserve-cell");
+                if (empty || player == null) {
+                    setText(null);
+                    return;
+                }
+                PlayerState state = states.get(player.getId());
+                String role = benchIds.contains(player.getId()) ? "BANQUILLO" : "RESERVA";
+                setText(role + "  •  " + player.getPosition() + "  •  "
+                        + player.getFullName() + "  •  GRL " + player.getOverall()
+                        + (state == null ? "" : "  •  FORMA " + state.getForm()
+                        + "  •  FIT " + state.getFitness()));
+                getStyleClass().add(benchIds.contains(player.getId())
+                        ? "lineup-bench-cell" : "lineup-reserve-cell");
+            }
+        });
+        return list;
+    }
+
     private ListView<Player> marketPlayerList(java.util.Map<Long, Double> marketPrices,
             java.util.Map<Long, Team> marketTeams, java.util.Set<Long> shortlistIds) {
         ListView<Player> list = new ListView<>();
@@ -2055,20 +3842,23 @@ public class Main extends Application {
                         + player.getPosition() + "  •  "
                         + player.getFullName() + "  •  GRL " + player.getOverall()
                         + (seller == null ? "" : "  •  " + seller.getShortName())
-                        + "  •  Precio €" + String.format("%.1fM", price / 1_000_000));
+                        + (price == null
+                        ? "  •  NO EN VENTA  •  Valor €" + String.format("%.1fM",
+                        player.getMarketValue() / 1_000_000)
+                        : "  •  EN VENTA €" + String.format("%.1fM", price / 1_000_000)));
             }
         });
         return list;
     }
 
-    private ListView<Player> ownMarketPlayerList(PlayerMarketRepository marketRepository) {
+    private ListView<Player> ownMarketPlayerList(java.util.Map<Long, Double> askingPrices) {
         ListView<Player> list = new ListView<>();
         list.setCellFactory(view -> new ListCell<>() {
             @Override protected void updateItem(Player player, boolean empty) {
                 super.updateItem(player, empty);
                 if (empty || player == null) setText(null);
                 else {
-                    Double price = marketRepository.findAskingPrice(player.getId());
+                    Double price = askingPrices.get(player.getId());
                     String market = price == null ? "NO LISTADO"
                             : "EN VENTA  €" + String.format("%.1fM", price / 1_000_000);
                     setText(player.getPosition() + "  •  " + player.getFullName()
@@ -2081,18 +3871,25 @@ public class Main extends Application {
         return list;
     }
 
-    private ListView<TransferOffer> incomingOfferList() {
+    private ListView<TransferOffer> incomingOfferList(
+            java.util.Map<Long, Player> playersById,
+            java.util.Map<Long, Team> teamsById,
+            java.util.Map<Long, Double> askingPrices) {
         ListView<TransferOffer> list = new ListView<>();
         list.setCellFactory(view -> new ListCell<>() {
             @Override protected void updateItem(TransferOffer offer, boolean empty) {
                 super.updateItem(offer, empty);
                 if (empty || offer == null) setText(null);
                 else {
-                    Player player = new PlayerRepository().findById(offer.getPlayer().getId());
-                    Team buyer = new TeamRepository().findById(offer.getBuyingTeam().getId());
+                    Player player = playersById.get(offer.getPlayer().getId());
+                    Team buyer = teamsById.get(offer.getBuyingTeam().getId());
+                    Double asking = askingPrices.get(player.getId());
                     setText(player.getFullName() + "  •  " + buyer.getName()
                             + "  •  €" + String.format("%.1fM", offer.getAmount() / 1_000_000)
-                            + "  •  " + offer.getOfferDate());
+                            + (asking == null ? "" : " / Pide €"
+                            + String.format("%.1fM", asking / 1_000_000))
+                            + "  •  " + offer.getOfferDate()
+                            + "  •  límite " + offer.getResponseDeadline());
                 }
             }
         });
@@ -2100,6 +3897,7 @@ public class Main extends Application {
     }
 
     private void setScene(Stage stage, javafx.scene.Parent root) {
+        rememberCurrentScroll();
         if (activeAnimation != null) {
             activeAnimation.stop();
             activeAnimation = null;
@@ -2113,10 +3911,30 @@ public class Main extends Application {
                     stage.setFullScreen(!stage.isFullScreen());
                 }
             });
+            appScene.widthProperty().addListener((observable, previous, current) ->
+                    applyViewportMode());
+            appScene.heightProperty().addListener((observable, previous, current) ->
+                    applyViewportMode());
             stage.setScene(appScene);
         } else {
             appScene.setRoot(root);
         }
+        applyViewportMode();
+    }
+
+    private void rememberCurrentScroll() {
+        if (appScene == null || appScene.getRoot() == null) return;
+        Node node = appScene.getRoot().lookup("#career-content-scroll");
+        if (node instanceof ScrollPane scroll && scroll.getUserData() instanceof String screen) {
+            navigationState.remember(screen, scroll.getHvalue(), scroll.getVvalue());
+        }
+    }
+
+    private void applyViewportMode() {
+        if (appScene == null || appScene.getRoot() == null) return;
+        boolean compact = ViewportPolicy.compact(appScene.getWidth(), appScene.getHeight());
+        appScene.getRoot().getStyleClass().remove("compact-viewport");
+        if (compact) appScene.getRoot().getStyleClass().add("compact-viewport");
     }
 
     public static void main(String[] args) { launch(); }

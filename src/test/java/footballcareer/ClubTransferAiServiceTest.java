@@ -20,8 +20,7 @@ class ClubTransferAiServiceTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         service = new ClubTransferAiService();
         controlledTeam = new TeamRepository().findByShortName("VCF");
         seasonId = new SeasonRepository().findFirst().getId();
@@ -85,5 +84,14 @@ class ClubTransferAiServiceTest {
         assertTrue(goalkeepers > 0);
         assertTrue(defenders > 0);
         assertTrue(attackers > 0);
+
+        java.util.Map<Long, Long> currentTeams = new PlayerTeamRepository()
+                .findAllCurrentTeamIds();
+        long globalCandidates = new PlayerRepository().findAll().stream()
+                .filter(player -> currentTeams.containsKey(player.getId()))
+                .filter(player -> currentTeams.get(player.getId()) != controlledTeam.getId())
+                .count();
+        assertTrue(globalCandidates > listed.size());
+        assertFalse(new CompetitionTeamRepository().findLeagueNamesByTeam(seasonId).isEmpty());
     }
 }

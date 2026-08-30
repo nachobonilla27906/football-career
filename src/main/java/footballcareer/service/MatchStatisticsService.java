@@ -50,6 +50,11 @@ public class MatchStatisticsService {
         stats.setFouls(7 + random.nextInt(10));
         stats.setYellowCards(count(events, team.getId(), MatchEventType.YELLOW_CARD));
         stats.setRedCards(count(events, team.getId(), MatchEventType.RED_CARD));
+        stats.setExpectedGoals(Math.round((shotsOnTarget * 0.22
+                + (shots - shotsOnTarget) * 0.06) * 100) / 100.0);
+        stats.setPasses(230 + possession * 4 + random.nextInt(81));
+        stats.setPassAccuracy(clamp(68 + possession / 4 + random.nextInt(7), 65, 94));
+        stats.setTackles(8 + random.nextInt(13));
         return stats;
     }
 

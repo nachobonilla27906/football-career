@@ -15,8 +15,7 @@ class CareerShortlistRepositoryTest {
 
     @Test
     void shortlistIsPersistedPerCareer() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         Season season = new SeasonRepository().findFirst();
         Team liverpool = new TeamRepository().findByShortName("LIV");
         Career career = new CareerService(new CareerRepository(), new TeamRepository(),

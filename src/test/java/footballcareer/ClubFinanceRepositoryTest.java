@@ -14,8 +14,7 @@ class ClubFinanceRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         repository = new ClubFinanceRepository();
         valencia = new TeamRepository().findByShortName("VCF");
     }

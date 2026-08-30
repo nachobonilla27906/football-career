@@ -81,6 +81,7 @@ public class CareerService {
         careerRepository.save(career);
         new footballcareer.database.CareerMatchStateRepository().initialize(career, true);
         footballcareer.database.CareerContext.activate(career.getId());
+        new ManagerReputationService().record(career);
 
         return career;
     }
@@ -129,6 +130,7 @@ public class CareerService {
 
         career.setCurrentDate(nextDate);
         careerRepository.updateCurrentDate(career);
+        new LoanService().processReturns(nextDate);
 
         if (awaitControlledMatch) {
             worldSimulationService.processDate(nextDate,
@@ -139,6 +141,7 @@ public class CareerService {
                     career.getCurrentSeason().getId(),
                     career.getControlledTeam().getId());
         }
+        new ManagerReputationService().record(career);
     }
 
     public void advanceDays(Career career, int days) {

@@ -11,8 +11,32 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class CompetitionTeamRepository {
+
+    public Map<Long, String> findLeagueNamesByTeam(long seasonId) {
+        String sql = """
+                SELECT ct.team_id, c.name
+                FROM competition_teams ct
+                JOIN competitions c ON c.id = ct.competition_id
+                WHERE c.season_id = ? AND c.league_id IS NOT NULL
+                ORDER BY c.tier, c.name
+                """;
+        Map<Long, String> leagues = new LinkedHashMap<>();
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, seasonId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) leagues.putIfAbsent(
+                        resultSet.getLong("team_id"), resultSet.getString("name"));
+            }
+            return leagues;
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not load team leagues.", exception);
+        }
+    }
 
     public void addTeamToCompetition(
             long competitionId,

@@ -10,7 +10,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class LeagueStandingRepository {
 
@@ -35,6 +38,9 @@ public class LeagueStandingRepository {
     }
 
     public List<LeagueStanding> findByCompetition(long competitionId) {
+        if (CareerContext.getCareerId() != null) {
+            return deriveCareerStandings(competitionId);
+        }
         String sql = """
                 SELECT ls.*, t.*
                 FROM league_standings ls
@@ -86,6 +92,9 @@ public class LeagueStandingRepository {
         if (!match.isPlayed()) {
             throw new IllegalArgumentException("Match has not been played.");
         }
+        // Career standings are derived from that career's match results. Writing to
+        // the shared seed table here would leak points into every other save.
+        if (CareerContext.getCareerId() != null) return;
 
         String sql = """
                 UPDATE league_standings
@@ -125,6 +134,48 @@ public class LeagueStandingRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not apply match result.", e);
+        }
+    }
+
+    private List<LeagueStanding> deriveCareerStandings(long competitionId) {
+        Competition competition = new Competition();
+        competition.setId(competitionId);
+        Map<Long, LeagueStanding> byTeam = new LinkedHashMap<>();
+        for (Team team : new CompetitionTeamRepository().findTeamsByCompetition(competitionId)) {
+            LeagueStanding row = new LeagueStanding();
+            row.setCompetition(competition);
+            row.setTeam(team);
+            byTeam.put(team.getId(), row);
+        }
+        for (Match match : new MatchRepository().findByCompetition(competitionId)) {
+            if (!match.isPlayed()) continue;
+            applyDerivedResult(byTeam.get(match.getHomeTeam().getId()),
+                    match.getHomeGoals(), match.getAwayGoals());
+            applyDerivedResult(byTeam.get(match.getAwayTeam().getId()),
+                    match.getAwayGoals(), match.getHomeGoals());
+        }
+        return byTeam.values().stream().sorted(Comparator
+                .comparingInt(LeagueStanding::getPoints).reversed()
+                .thenComparing(Comparator.comparingInt(
+                        LeagueStanding::getGoalDifference).reversed())
+                .thenComparing(Comparator.comparingInt(
+                        LeagueStanding::getGoalsFor).reversed())
+                .thenComparing(row -> row.getTeam().getName())).toList();
+    }
+
+    private void applyDerivedResult(LeagueStanding row, int goalsFor, int goalsAgainst) {
+        if (row == null) return;
+        row.setPlayed(row.getPlayed() + 1);
+        row.setGoalsFor(row.getGoalsFor() + goalsFor);
+        row.setGoalsAgainst(row.getGoalsAgainst() + goalsAgainst);
+        if (goalsFor > goalsAgainst) {
+            row.setWins(row.getWins() + 1);
+            row.setPoints(row.getPoints() + 3);
+        } else if (goalsFor == goalsAgainst) {
+            row.setDraws(row.getDraws() + 1);
+            row.setPoints(row.getPoints() + 1);
+        } else {
+            row.setLosses(row.getLosses() + 1);
         }
     }
 

@@ -9,6 +9,9 @@ public class Contract {
     private LocalDate startDate;
     private LocalDate endDate;
     private double salary;
+    private double signingBonus;
+    private Double releaseClause;
+    private String squadRole = "ROTATION";
     private boolean active;
 
     public long getId() { return id; }
@@ -23,6 +26,12 @@ public class Contract {
     public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
     public double getSalary() { return salary; }
     public void setSalary(double salary) { this.salary = salary; }
+    public double getSigningBonus() { return signingBonus; }
+    public void setSigningBonus(double signingBonus) { this.signingBonus = signingBonus; }
+    public Double getReleaseClause() { return releaseClause; }
+    public void setReleaseClause(Double releaseClause) { this.releaseClause = releaseClause; }
+    public String getSquadRole() { return squadRole; }
+    public void setSquadRole(String squadRole) { this.squadRole = squadRole; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
 }

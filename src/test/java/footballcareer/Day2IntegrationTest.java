@@ -1,7 +1,6 @@
 package footballcareer;
 
 import footballcareer.database.CareerRepository;
-import footballcareer.database.DataSeeder;
 import footballcareer.database.DatabaseInitializer;
 import footballcareer.database.SeasonRepository;
 import footballcareer.database.TeamRepository;
@@ -26,8 +25,7 @@ class Day2IntegrationTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
 
         seasonRepository = new SeasonRepository();
         careerService = new CareerService(

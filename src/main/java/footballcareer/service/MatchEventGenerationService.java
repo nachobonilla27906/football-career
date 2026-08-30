@@ -1,6 +1,7 @@
 package footballcareer.service;
 
 import footballcareer.database.MatchEventRepository;
+import footballcareer.database.MatchRoleRepository;
 import footballcareer.model.Match;
 import footballcareer.model.MatchEvent;
 import footballcareer.model.MatchLineup;
@@ -51,17 +52,28 @@ public class MatchEventGenerationService {
 
     private void generateGoals(Match match, Team team, List<Player> starters,
             int goals, List<MatchEvent> events) {
+        MatchRoleRepository.Assignment roles = new MatchRoleRepository()
+                .find(match.getId(), team.getId());
         for (int i = 0; i < goals; i++) {
-            Player scorer = weightedPlayer(starters, true);
+            Player scorer = roles != null && random.nextDouble() < 0.20
+                    ? findOrWeighted(starters, roles.penaltyTakerId(), true)
+                    : weightedPlayer(starters, true);
             MatchEvent goal = createEvent(match, team, scorer,
                     1 + random.nextInt(90), MatchEventType.GOAL);
             if (random.nextDouble() < 0.72) {
                 List<Player> possibleAssistants = starters.stream()
                         .filter(player -> player.getId() != scorer.getId()).toList();
-                goal.setSecondaryPlayer(weightedPlayer(possibleAssistants, false));
+                goal.setSecondaryPlayer(roles != null && random.nextDouble() < 0.25
+                        ? findOrWeighted(possibleAssistants, roles.cornerTakerId(), false)
+                        : weightedPlayer(possibleAssistants, false));
             }
             events.add(goal);
         }
+    }
+
+    private Player findOrWeighted(List<Player> players, long playerId, boolean scorer) {
+        return players.stream().filter(player -> player.getId() == playerId).findFirst()
+                .orElseGet(() -> weightedPlayer(players, scorer));
     }
 
     private void generateCards(Match match, Team team, List<Player> starters,

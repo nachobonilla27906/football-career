@@ -44,6 +44,8 @@ class PlayerRepositoryTest {
                 150_000_000,
                 10_000_000
         );
+        player.setHeightCm(181);
+        player.setSecondaryPosition(Position.LW);
 
         repository.save(player);
 
@@ -72,6 +74,8 @@ class PlayerRepositoryTest {
         );
 
         assertEquals(91, savedPlayer.getOverall());
+        assertEquals(181, savedPlayer.getHeightCm());
+        assertEquals(Position.LW, savedPlayer.getSecondaryPosition());
         assertEquals(96, savedPlayer.getPotential());
 
         assertEquals(90, savedPlayer.getPace());

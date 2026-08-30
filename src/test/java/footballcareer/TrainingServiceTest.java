@@ -12,8 +12,7 @@ class TrainingServiceTest {
 
     @Test
     void trainingChangesSquadStateAndCanOnlyBeDoneOncePerDay() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         Season season = new SeasonRepository().findFirst();
         Team team = new TeamRepository().findByShortName("LIV");
         Career career = new CareerService(new CareerRepository(), new TeamRepository(),

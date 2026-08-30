@@ -14,8 +14,7 @@ class MatchTacticsRepositoryTest {
 
     @Test
     void formationIsPersistedForTeamAndMatch() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         Season season = new SeasonRepository().findFirst();
         new FootballWorldService().prepareSeason(season.getId());
         Competition competition = new CompetitionRepository().findBySeason(season.getId()).getFirst();

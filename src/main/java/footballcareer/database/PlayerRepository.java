@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PlayerRepository {
+    private static final java.util.Map<Long, List<Player>> ALL_PLAYERS_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     public void save(Player player) {
 
@@ -24,6 +26,8 @@ public class PlayerRepository {
                     nationality,
                     position,
                     preferred_foot,
+                    height_cm,
+                    secondary_position,
                     overall,
                     potential,
                     pace,
@@ -35,7 +39,7 @@ public class PlayerRepository {
                     market_value,
                     salary
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         try (Connection connection = Database.getConnection();
@@ -50,16 +54,19 @@ public class PlayerRepository {
             statement.setString(4, player.getNationality());
             statement.setString(5, player.getPosition().name());
             statement.setString(6, player.getPreferredFoot().name());
-            statement.setInt(7, player.getOverall());
-            statement.setInt(8, player.getPotential());
-            statement.setInt(9, player.getPace());
-            statement.setInt(10, player.getShooting());
-            statement.setInt(11, player.getPassing());
-            statement.setInt(12, player.getDribbling());
-            statement.setInt(13, player.getDefending());
-            statement.setInt(14, player.getPhysical());
-            statement.setDouble(15, player.getMarketValue());
-            statement.setDouble(16, player.getSalary());
+            statement.setInt(7, player.getHeightCm());
+            if (player.getSecondaryPosition() == null) statement.setNull(8, java.sql.Types.VARCHAR);
+            else statement.setString(8, player.getSecondaryPosition().name());
+            statement.setInt(9, player.getOverall());
+            statement.setInt(10, player.getPotential());
+            statement.setInt(11, player.getPace());
+            statement.setInt(12, player.getShooting());
+            statement.setInt(13, player.getPassing());
+            statement.setInt(14, player.getDribbling());
+            statement.setInt(15, player.getDefending());
+            statement.setInt(16, player.getPhysical());
+            statement.setDouble(17, player.getMarketValue());
+            statement.setDouble(18, player.getSalary());
 
             statement.executeUpdate();
 
@@ -76,15 +83,11 @@ public class PlayerRepository {
                     e
             );
         }
+        clearReadCache();
     }
 
     public Player findById(long id) {
-
-        String sql = """
-                SELECT *
-                FROM players
-                WHERE id = ?
-                """;
+        String sql = playerSelect() + " WHERE p.id = ?";
 
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -113,11 +116,9 @@ public class PlayerRepository {
             String lastName
     ) {
 
-        String sql = """
-                SELECT *
-                FROM players
-                WHERE first_name = ?
-                  AND last_name = ?
+        String sql = playerSelect() + """
+                WHERE p.first_name = ?
+                  AND p.last_name = ?
                 LIMIT 1
                 """;
 
@@ -149,11 +150,10 @@ public class PlayerRepository {
             String lastName,
             LocalDate birthDate
     ) {
-        String sql = """
-                SELECT * FROM players
-                WHERE first_name = ?
-                  AND last_name = ?
-                  AND birth_date = ?
+        String sql = playerSelect() + """
+                WHERE p.first_name = ?
+                  AND p.last_name = ?
+                  AND p.birth_date = ?
                 LIMIT 1
                 """;
 
@@ -171,14 +171,22 @@ public class PlayerRepository {
     }
 
     public List<Player> findCurrentPlayersByTeam(long teamId) {
-        String sql = """
-                SELECT p.*
-                FROM players p
-                JOIN player_team pt ON p.id = pt.player_id
+        Long careerId = CareerContext.getCareerId();
+        String membership = careerId == null ? "player_team" : "career_player_team";
+        String sql = playerSelect() + """
+                JOIN %s pt ON p.id = pt.player_id
                 WHERE pt.team_id = ?
+                  %s
                   AND pt.end_date IS NULL
-                ORDER BY p.position, p.overall DESC, p.last_name
-                """;
+                ORDER BY CASE p.position
+                    WHEN 'GK' THEN 1
+                    WHEN 'RB' THEN 2 WHEN 'CB' THEN 3 WHEN 'LB' THEN 4
+                    WHEN 'CDM' THEN 5 WHEN 'CM' THEN 6 WHEN 'CAM' THEN 7
+                    WHEN 'RW' THEN 8 WHEN 'LW' THEN 9 WHEN 'ST' THEN 10
+                    ELSE 11 END,
+                    p.overall DESC, p.last_name
+                """.formatted(membership,
+                careerId == null ? "" : "AND pt.career_id = " + careerId);
         List<Player> players = new ArrayList<>();
 
         try (Connection connection = Database.getConnection();
@@ -196,24 +204,32 @@ public class PlayerRepository {
     }
 
     public List<Player> findAll() {
-        String sql = "SELECT * FROM players ORDER BY id";
+        long scope = CareerContext.getCareerId() == null ? -1L : CareerContext.getCareerId();
+        List<Player> cached = ALL_PLAYERS_CACHE.get(scope);
+        if (cached != null) return cached;
+        String sql = playerSelect() + " ORDER BY p.id";
         List<Player> players = new ArrayList<>();
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) players.add(mapPlayer(resultSet));
-            return players;
+            List<Player> snapshot = List.copyOf(players);
+            ALL_PLAYERS_CACHE.put(scope, snapshot);
+            return snapshot;
         } catch (SQLException e) {
             throw new RuntimeException("Could not find all players.", e);
         }
     }
 
     public void updateDevelopment(Player player) {
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "players" : "career_player_development";
         String sql = """
-                UPDATE players SET overall = ?, pace = ?, shooting = ?,
+                UPDATE %s SET overall = ?, pace = ?, shooting = ?,
                     passing = ?, dribbling = ?, defending = ?, physical = ?
-                WHERE id = ?
-                """;
+                WHERE %s = ? %s
+                """.formatted(table, careerId == null ? "id" : "player_id",
+                careerId == null ? "" : "AND career_id = " + careerId);
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, player.getOverall());
@@ -228,11 +244,19 @@ public class PlayerRepository {
         } catch (SQLException e) {
             throw new RuntimeException("Could not update player development.", e);
         }
+        if (careerId != null) {
+            var career = new CareerRepository().findById(careerId);
+            if (career != null) new PlayerProgressRepository().record(player.getId(),
+                    career.getCurrentDate(), player.getOverall(), player.getMarketValue());
+        }
+        clearReadCache();
     }
 
-    private Player mapPlayer(ResultSet resultSet) throws SQLException {
+    public static void clearReadCache() { ALL_PLAYERS_CACHE.clear(); }
+    static int cachedCareerScopes() { return ALL_PLAYERS_CACHE.size(); }
 
-        return new Player(
+    private Player mapPlayer(ResultSet resultSet) throws SQLException {
+        Player player = new Player(
                 resultSet.getLong("id"),
                 resultSet.getString("first_name"),
                 resultSet.getString("last_name"),
@@ -257,5 +281,30 @@ public class PlayerRepository {
                 resultSet.getDouble("market_value"),
                 resultSet.getDouble("salary")
         );
+        player.setHeightCm(resultSet.getInt("height_cm"));
+        String secondary = resultSet.getString("secondary_position");
+        if (secondary != null && !secondary.isBlank())
+            player.setSecondaryPosition(Position.valueOf(secondary));
+        return player;
+    }
+
+    private String playerSelect() {
+        Long careerId = CareerContext.getCareerId();
+        if (careerId == null) return "SELECT p.* FROM players p ";
+        return """
+                SELECT p.id, p.first_name, p.last_name, p.birth_date, p.nationality,
+                       p.position, p.preferred_foot, p.height_cm, p.secondary_position,
+                       p.potential, p.market_value, p.salary,
+                       COALESCE(cpd.overall, p.overall) AS overall,
+                       COALESCE(cpd.pace, p.pace) AS pace,
+                       COALESCE(cpd.shooting, p.shooting) AS shooting,
+                       COALESCE(cpd.passing, p.passing) AS passing,
+                       COALESCE(cpd.dribbling, p.dribbling) AS dribbling,
+                       COALESCE(cpd.defending, p.defending) AS defending,
+                       COALESCE(cpd.physical, p.physical) AS physical
+                FROM players p
+                LEFT JOIN career_player_development cpd
+                  ON cpd.player_id = p.id AND cpd.career_id = %d
+                """.formatted(careerId);
     }
 }

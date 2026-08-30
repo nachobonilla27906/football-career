@@ -59,6 +59,7 @@ public class WorldSimulationService {
         List<Match> matches = matchDayService == null ? List.of()
                 : matchDayService.processBackgroundMatchesOn(date, controlledTeamId);
         transferAiService.processMarket(date, seasonId, controlledTeamId);
+        new TransferObligationService().process(date);
         return matches;
     }
 

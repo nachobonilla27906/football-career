@@ -14,8 +14,7 @@ class PlayerStateRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         repository = new PlayerStateRepository();
         player = new PlayerRepository().findCurrentPlayersByTeam(
                 new TeamRepository().findByShortName("ARS").getId()
@@ -25,6 +24,7 @@ class PlayerStateRepositoryTest {
     @Test
     void shouldInitializeAndUpdateStateWithinLimits() {
         PlayerState state = repository.findByPlayer(player.getId());
+        assertNotNull(repository.findAll().get(player.getId()));
         assertEquals(50, state.getForm());
         assertEquals(50, state.getMorale());
         assertEquals(100, state.getFitness());

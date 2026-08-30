@@ -19,19 +19,29 @@ public class MatchLineupRepository {
         if (starters.stream().noneMatch(player -> player.getPosition() == Position.GK))
             throw new IllegalArgumentException("Starting eleven requires a goalkeeper.");
         if (substitutes.size() > 7) throw new IllegalArgumentException("Maximum seven substitutes.");
-        String delete = "DELETE FROM match_lineups WHERE match_id = ? AND team_id = ?";
-        String insert = """
+        Long careerId = CareerContext.getCareerId();
+        String table = careerId == null ? "match_lineups" : "career_match_lineups";
+        String delete = "DELETE FROM " + table + " WHERE "
+                + (careerId == null ? "" : "career_id = ? AND ") + "match_id = ? AND team_id = ?";
+        String insert = careerId == null ? """
                 INSERT INTO match_lineups (match_id, team_id, player_id, role, position_order)
                 VALUES (?, ?, ?, ?, ?)
+                """ : """
+                INSERT INTO career_match_lineups
+                    (career_id, match_id, team_id, player_id, role, position_order)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """;
         try (Connection connection = Database.getConnection()) {
             connection.setAutoCommit(false);
             try (PreparedStatement deleteStatement = connection.prepareStatement(delete);
                  PreparedStatement insertStatement = connection.prepareStatement(insert)) {
-                deleteStatement.setLong(1, matchId); deleteStatement.setLong(2, teamId);
+                int deleteOffset = 0;
+                if (careerId != null) deleteStatement.setLong(++deleteOffset, careerId);
+                deleteStatement.setLong(++deleteOffset, matchId);
+                deleteStatement.setLong(++deleteOffset, teamId);
                 deleteStatement.executeUpdate();
-                addPlayers(insertStatement, matchId, teamId, starters, "STARTER");
-                addPlayers(insertStatement, matchId, teamId, substitutes, "SUBSTITUTE");
+                addPlayers(insertStatement, careerId, matchId, teamId, starters, "STARTER");
+                addPlayers(insertStatement, careerId, matchId, teamId, substitutes, "SUBSTITUTE");
                 insertStatement.executeBatch();
                 connection.commit();
             } catch (Exception e) {
@@ -44,9 +54,14 @@ public class MatchLineupRepository {
     }
 
     public MatchLineup find(long matchId, long teamId) {
-        String sql = """
+        Long careerId = CareerContext.getCareerId();
+        String sql = careerId == null ? """
                 SELECT player_id, role FROM match_lineups
                 WHERE match_id = ? AND team_id = ?
+                ORDER BY CASE role WHEN 'STARTER' THEN 0 ELSE 1 END, position_order
+                """ : """
+                SELECT player_id, role FROM career_match_lineups
+                WHERE career_id = ? AND match_id = ? AND team_id = ?
                 ORDER BY CASE role WHEN 'STARTER' THEN 0 ELSE 1 END, position_order
                 """;
         List<Player> starters = new ArrayList<>();
@@ -54,7 +69,10 @@ public class MatchLineupRepository {
         PlayerRepository players = new PlayerRepository();
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, matchId); statement.setLong(2, teamId);
+            int offset = 0;
+            if (careerId != null) statement.setLong(++offset, careerId);
+            statement.setLong(++offset, matchId);
+            statement.setLong(++offset, teamId);
             try (ResultSet rs = statement.executeQuery()) {
                 while (rs.next()) {
                     Player player = players.findById(rs.getLong("player_id"));
@@ -70,12 +88,17 @@ public class MatchLineupRepository {
         }
     }
 
-    private void addPlayers(PreparedStatement statement, long matchId, long teamId,
+    private void addPlayers(PreparedStatement statement, Long careerId, long matchId, long teamId,
             List<Player> players, String role) throws SQLException {
         for (int i = 0; i < players.size(); i++) {
-            statement.setLong(1, matchId); statement.setLong(2, teamId);
-            statement.setLong(3, players.get(i).getId()); statement.setString(4, role);
-            statement.setInt(5, i); statement.addBatch();
+            int offset = 0;
+            if (careerId != null) statement.setLong(++offset, careerId);
+            statement.setLong(++offset, matchId);
+            statement.setLong(++offset, teamId);
+            statement.setLong(++offset, players.get(i).getId());
+            statement.setString(++offset, role);
+            statement.setInt(++offset, i);
+            statement.addBatch();
         }
     }
 }

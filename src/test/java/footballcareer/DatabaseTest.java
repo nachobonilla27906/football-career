@@ -27,13 +27,16 @@ class DatabaseTest {
                      "ORDER BY name"
              )) {
 
-            int tableCount = 0;
+            java.util.Set<String> tables = new java.util.HashSet<>();
 
             while (resultSet.next()) {
-                tableCount++;
+                tables.add(resultSet.getString("name"));
             }
 
-            assertEquals(24, tableCount);
+            assertTrue(tables.containsAll(java.util.Set.of("players", "teams", "careers",
+                    "matches", "career_match_events", "career_team_sheets",
+                    "career_player_progress_history")));
+            assertTrue(tables.size() >= 50, "The complete career schema must be initialized.");
         }
     }
 }

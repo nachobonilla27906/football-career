@@ -10,6 +10,10 @@ public class MatchTeamStats {
     private int fouls;
     private int yellowCards;
     private int redCards;
+    private double expectedGoals;
+    private int passes;
+    private int passAccuracy;
+    private int tackles;
 
     public Match getMatch() { return match; }
     public void setMatch(Match match) { this.match = match; }
@@ -29,4 +33,12 @@ public class MatchTeamStats {
     public void setYellowCards(int yellowCards) { this.yellowCards = yellowCards; }
     public int getRedCards() { return redCards; }
     public void setRedCards(int redCards) { this.redCards = redCards; }
+    public double getExpectedGoals() { return expectedGoals; }
+    public void setExpectedGoals(double expectedGoals) { this.expectedGoals = expectedGoals; }
+    public int getPasses() { return passes; }
+    public void setPasses(int passes) { this.passes = passes; }
+    public int getPassAccuracy() { return passAccuracy; }
+    public void setPassAccuracy(int passAccuracy) { this.passAccuracy = passAccuracy; }
+    public int getTackles() { return tackles; }
+    public void setTackles(int tackles) { this.tackles = tackles; }
 }

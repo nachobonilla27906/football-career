@@ -1,7 +1,6 @@
 package footballcareer;
 
 import footballcareer.database.CompetitionTeamRepository;
-import footballcareer.database.DataSeeder;
 import footballcareer.database.DatabaseInitializer;
 import footballcareer.database.MatchRepository;
 import footballcareer.database.SeasonRepository;
@@ -17,8 +16,7 @@ class Day10CalendarRepairTest {
 
     @Test
     void liverpoolAlwaysHasAnUpcomingFixtureAfterWorldPreparation() {
-        DatabaseInitializer.resetForTests();
-        DataSeeder.seed();
+        DatabaseInitializer.resetAndSeedForTests();
         Season season = new SeasonRepository().findFirst();
 
         new FootballWorldService().prepareSeason(season.getId());
