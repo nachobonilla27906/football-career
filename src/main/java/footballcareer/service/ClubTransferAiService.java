@@ -67,11 +67,13 @@ public class ClubTransferAiService {
         }
         List<Team> aiTeams = teamRepository.findAll().stream()
                 .filter(team -> team.getId() != controlledTeamId).toList();
-        aiTeams.forEach(this::listSurplusPlayer);
-        createIncomingOffers(date, controlledTeamId, aiTeams);
+        List<Team> weeklyActors = new ArrayList<>(aiTeams);
+        java.util.Collections.shuffle(weeklyActors, random);
+        weeklyActors = weeklyActors.stream().limit(12).toList();
+        weeklyActors.forEach(this::listSurplusPlayer);
+        createIncomingOffers(date, controlledTeamId, weeklyActors);
 
-        List<Team> buyers = new ArrayList<>(aiTeams);
-        java.util.Collections.shuffle(buyers, random);
+        List<Team> buyers = new ArrayList<>(weeklyActors);
         List<Transfer> completed = new ArrayList<>();
         for (Team buyer : buyers) {
             Player target = chooseAffordableTarget(buyer, controlledTeamId);

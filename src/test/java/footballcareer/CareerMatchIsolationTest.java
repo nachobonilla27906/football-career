@@ -25,6 +25,11 @@ class CareerMatchIsolationTest {
         MatchRepository matches = new MatchRepository();
 
         Career first = service.createCareer("Primera", madrid.getId(), season.getId());
+        Match nextForActiveCareer = matches.findNextForTeam(madrid.getId(), season.getId(),
+                first.getCurrentDate());
+        assertNotNull(nextForActiveCareer);
+        assertTrue(nextForActiveCareer.getHomeTeam().getId() == madrid.getId()
+                || nextForActiveCareer.getAwayTeam().getId() == madrid.getId());
         Match firstFixture = matches.findByCompetition(competition.getId()).getFirst();
         firstFixture.setResult(3, 1);
         matches.updateResult(firstFixture);

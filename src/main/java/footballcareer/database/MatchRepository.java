@@ -25,9 +25,11 @@ public class MatchRepository {
                     date,
                     home_goals,
                     away_goals,
-                    played
+                    played,
+                    stage,
+                    career_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         try (Connection connection = Database.getConnection();
@@ -43,6 +45,9 @@ public class MatchRepository {
             statement.setInt(5, match.getHomeGoals());
             statement.setInt(6, match.getAwayGoals());
             statement.setInt(7, match.isPlayed() ? 1 : 0);
+            statement.setString(8, match.getStage());
+            if (match.getCareerId() == null) statement.setNull(9, java.sql.Types.INTEGER);
+            else statement.setLong(9, match.getCareerId());
 
             statement.executeUpdate();
 
@@ -58,7 +63,7 @@ public class MatchRepository {
     }
 
     public Match findById(long id) {
-        String sql = baseSelect() + " WHERE m.id = ?";
+        String sql = baseSelect() + " WHERE m.id = ? AND " + scopePredicate();
 
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -76,16 +81,42 @@ public class MatchRepository {
 
     public List<Match> findByCompetition(long competitionId) {
         String sql = baseSelect()
-                + " WHERE m.competition_id = ? ORDER BY m.date, m.id";
+                + " WHERE m.competition_id = ? AND " + scopePredicate() + " ORDER BY m.date, m.id";
 
         return findMany(sql, competitionId, null);
     }
 
     public List<Match> findByDate(LocalDate date) {
         String sql = baseSelect()
-                + " WHERE m.date = ? ORDER BY m.id";
+                + " WHERE m.date = ? AND " + scopePredicate() + " ORDER BY m.id";
 
         return findMany(sql, null, date);
+    }
+
+    public Match findNextForTeam(long teamId, long seasonId, LocalDate fromDate) {
+        Long careerId = CareerContext.getCareerId();
+        String unplayed = careerId == null ? "m.played = 0" : "COALESCE(cms.played, 0) = 0";
+        String sql = baseSelect() + """
+                 WHERE c.season_id = ?
+                  AND (m.home_team_id = ? OR m.away_team_id = ?)
+                  AND m.date >= ?
+                  AND %s
+                  AND %s
+                ORDER BY m.date, m.id
+                LIMIT 1
+                """.formatted(scopePredicate(), unplayed);
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, seasonId);
+            statement.setLong(2, teamId);
+            statement.setLong(3, teamId);
+            statement.setString(4, fromDate.toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? mapMatch(resultSet) : null;
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not find next team match.", exception);
+        }
     }
 
     public void updateResult(Match match) {
@@ -179,6 +210,8 @@ public class MatchRepository {
                 SELECT
                     m.id,
                     m.date,
+                    m.stage,
+                    m.career_id,
                 """ + stateColumns + """
                     c.id AS competition_id,
                     c.name AS competition_name,
@@ -240,6 +273,9 @@ public class MatchRepository {
                 awayTeam,
                 LocalDate.parse(resultSet.getString("date"))
         );
+        match.setStage(resultSet.getString("stage"));
+        long scopedCareer = resultSet.getLong("career_id");
+        if (!resultSet.wasNull()) match.setCareerId(scopedCareer);
 
         if (resultSet.getInt("played") == 1) {
             match.setResult(
@@ -249,6 +285,12 @@ public class MatchRepository {
         }
 
         return match;
+    }
+
+    private String scopePredicate() {
+        Long careerId = CareerContext.getCareerId();
+        return careerId == null ? "m.career_id IS NULL"
+                : "(m.career_id IS NULL OR m.career_id = " + careerId + ")";
     }
 
     private Team mapTeam(

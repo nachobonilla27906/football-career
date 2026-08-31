@@ -1,0 +1,97 @@
+name,short_name,country,stadium_name,stadium_capacity,reputation
+AFC Bournemouth,BOU,England,Vitality Stadium,11307,81
+Arsenal,ARS,England,Emirates Stadium,60704,91
+Aston Villa,AVL,England,Villa Park,42657,87
+Brentford,BRE,England,Gtech Community Stadium,17250,80
+Brighton & Hove Albion,BHA,England,Amex Stadium,31876,84
+Chelsea,CHE,England,Stamford Bridge,40341,86
+Coventry City,COV,England,Coventry Building Society Arena,32609,78
+Crystal Palace,CRY,England,Selhurst Park,25486,83
+Everton,EVE,England,Hill Dickinson Stadium,52888,83
+Fulham FC,FUL,England,Craven Cottage,29600,84
+Hull City,HUL,England,MKM Stadium,25586,76
+Ipswich Town,IPS,England,Portman Road,30311,80
+Leeds United,LEE,England,Elland Road,37645,82
+Liverpool,LIV,England,Anfield,61276,87
+Manchester City,MCI,England,Etihad Stadium,53400,89
+Manchester United,MUN,England,Old Trafford,74310,85
+Newcastle United,NEW,England,St James Park,52305,85
+Nottingham Forest,NFO,England,City Ground,30455,85
+Sunderland,SUN,England,Stadium of Light,48707,80
+Tottenham Hotspur,TOT,England,Tottenham Hotspur Stadium,62850,86
+Athletic Club,ATH,Spain,San Mames,53289,84
+Atlético Madrid,ATM,Spain,Metropolitano,70460,88
+CA Osasuna,OSA,Spain,El Sadar,23576,80
+RC Celta,CEL,Spain,Balaidos,24870,82
+Deportivo Alavés,ALA,Spain,Mendizorroza,19840,79
+Elche CF,ELC,Spain,Martinez Valero,31388,77
+FC Barcelona,BAR,Spain,Spotify Camp Nou,99354,86
+Getafe CF,GET,Spain,Coliseum,16800,80
+Levante UD,LEV,Spain,Ciutat de Valencia,26354,78
+Málaga CF,MAL,Spain,La Rosaleda,30044,74
+Racing de Santander,RAC,Spain,El Sardinero,22222,74
+Rayo Vallecano,RAY,Spain,Vallecas,14708,80
+Deportivo de La Coruña,DEP,Spain,Riazor,32912,76
+RCD Espanyol,ESP,Spain,RCDE Stadium,40500,80
+Real Betis Balompié,BET,Spain,Benito Villamarin,60721,82
+Real Madrid,RMA,Spain,Santiago Bernabeu,83186,87
+Real Sociedad,RSO,Spain,Reale Arena,39500,84
+Sevilla FC,SEV,Spain,Ramon Sanchez-Pizjuan,43883,80
+Valencia CF,VAL,Spain,Mestalla,49430,81
+Villarreal CF,VIL,Spain,Estadio de la Ceramica,23500,83
+AC Milan,MIL,Italy,San Siro,75817,84
+Atalanta,ATA,Italy,New Balance Arena,24750,84
+Bologna,BOL,Italy,Renato Dall Ara,36462,82
+Cagliari,CAG,Italy,Unipol Domus,16416,78
+Como,COM,Italy,Giuseppe Sinigaglia,13602,81
+Fiorentina,FIO,Italy,Artemio Franchi,43147,81
+Frosinone,FRO,Italy,Benito Stirpe,16227,72
+Genoa,GEN,Italy,Luigi Ferraris,33205,77
+Inter,INT,Italy,San Siro,75817,88
+Juventus,JUV,Italy,Allianz Stadium,41507,86
+Lazio,LAZ,Italy,Stadio Olimpico,70634,82
+Lecce,LEC,Italy,Via del Mare,31533,78
+Monza,MON,Italy,U-Power Stadium,18568,77
+Napoli,NAP,Italy,Diego Armando Maradona,54726,86
+Parma,PAR,Italy,Ennio Tardini,22352,77
+Roma,ROM,Italy,Stadio Olimpico,70634,84
+Sassuolo,SAS,Italy,Mapei Stadium,21584,79
+Torino,TOR,Italy,Olimpico Grande Torino,28177,80
+Udinese,UDI,Italy,Bluenergy Stadium,25144,78
+Venezia,VEN,Italy,Pier Luigi Penzo,11150,76
+FC Augsburg,AUG,Germany,WWK Arena,30660,79
+1. FC Union Berlin,FCU,Germany,An der Alten Forsterei,22012,80
+SV Werder Bremen,BRE2,Germany,Weserstadion,42100,78
+Borussia Dortmund,BVB,Germany,Signal Iduna Park,81365,85
+SV Elversberg,ELV,Germany,Waldstadion Kaiserlinde,10000,74
+Eintracht Frankfurt,SGE,Germany,Deutsche Bank Park,58000,81
+SC Freiburg,SCF,Germany,Europa-Park Stadion,34700,81
+Hamburger SV,HSV,Germany,Volksparkstadion,57000,78
+TSG 1899 Hoffenheim,TSG,Germany,PreZero Arena,30150,79
+1. FC Köln,KOE,Germany,RheinEnergieStadion,50000,78
+RB Leipzig,RBL,Germany,Red Bull Arena,47069,83
+Bayer 04 Leverkusen,B04,Germany,BayArena,30210,83
+1. FSV Mainz 05,M05,Germany,Mewa Arena,33305,79
+Borussia Mönchengladbach,BMG,Germany,Borussia-Park,54057,81
+FC Bayern München,FCB,Germany,Allianz Arena,75024,86
+SC Paderborn 07,SCP,Germany,Home Deluxe Arena,15000,72
+FC Schalke 04,S04,Germany,Veltins-Arena,62271,74
+VfB Stuttgart,VFB,Germany,MHPArena,60449,80
+Angers SCO,ANG,France,Stade Raymond Kopa,18752,74
+AJ Auxerre,AUX,France,Stade de l Abbe-Deschamps,17897,75
+Stade Brestois 29,BRE3,France,Stade Francis-Le Ble,15220,78
+Le Havre AC,HAC,France,Stade Oceane,25178,77
+RC Lens,LEN,France,Stade Bollaert-Delelis,38223,79
+Lille OSC,LIL,France,Stade Pierre-Mauroy,50186,81
+FC Lorient,LOR,France,Stade du Moustoir,18110,78
+Olympique Lyonnais,LYO,France,Groupama Stadium,59186,80
+Le Mans FC,LEM,France,Stade Marie-Marvingt,25064,71
+Olympique de Marseille,OM,France,Orange Velodrome,67394,82
+AS Monaco,ASM,France,Stade Louis II,18523,82
+OGC Nice,NIC,France,Allianz Riviera,35624,81
+Paris FC,PFC,France,Stade Jean-Bouin,19000,79
+Paris Saint-Germain,PSG,France,Parc des Princes,47929,89
+Stade Rennais FC,REN,France,Roazhon Park,29778,83
+RC Strasbourg Alsace,STR,France,Stade de la Meinau,26109,80
+Toulouse FC,TOU,France,Stadium de Toulouse,33150,75
+ESTAC Troyes,TRO,France,Stade de l Aube,20420,71

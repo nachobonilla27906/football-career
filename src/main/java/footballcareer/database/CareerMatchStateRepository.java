@@ -19,7 +19,7 @@ public class CareerMatchStateRepository {
                        CASE WHEN ? = 0 AND m.played = 1 AND m.date <= ? THEN 1 ELSE 0 END
                 FROM matches m
                 JOIN competitions c ON c.id = m.competition_id
-                WHERE c.season_id = ?
+                WHERE c.season_id = ? AND (m.career_id IS NULL OR m.career_id = ?)
                 """;
         try (Connection connection = Database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -32,6 +32,7 @@ public class CareerMatchStateRepository {
             statement.setInt(6, existing);
             statement.setString(7, career.getCurrentDate().toString());
             statement.setLong(8, career.getCurrentSeason().getId());
+            statement.setLong(9, career.getId());
             statement.executeUpdate();
             if (!newCareer) migrateLegacyMatchDetails(connection, career.getId());
         } catch (SQLException exception) {
@@ -49,6 +50,23 @@ public class CareerMatchStateRepository {
                      """)) {
             statement.setLong(1, careerId);
             statement.executeUpdate();
+            try (PreparedStatement staleSeedMemberships = connection.prepareStatement("""
+                    DELETE FROM career_player_team AS stale
+                    WHERE stale.career_id = ? AND stale.end_date IS NULL
+                      AND EXISTS (
+                          SELECT 1 FROM initial_player_team initial
+                          JOIN career_player_team canonical
+                            ON canonical.career_id = stale.career_id
+                           AND canonical.player_id = stale.player_id
+                           AND canonical.team_id = initial.team_id
+                           AND canonical.end_date IS NULL
+                          WHERE initial.player_id = stale.player_id
+                            AND stale.team_id <> initial.team_id
+                      )
+                    """)) {
+                staleSeedMemberships.setLong(1, careerId);
+                staleSeedMemberships.executeUpdate();
+            }
             try (PreparedStatement market = connection.prepareStatement("""
                     INSERT OR IGNORE INTO career_player_market_status (career_id, player_id)
                     SELECT ?, id FROM players

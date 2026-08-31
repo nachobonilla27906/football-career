@@ -92,6 +92,7 @@
                 <configuration>
                     <systemPropertyVariables>
                         <footballcareer.database.url>jdbc:sqlite:target/football-career-test.db</footballcareer.database.url>
+                        <footballcareer.seed.compact>true</footballcareer.seed.compact>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -162,6 +163,7 @@
                                  <include>**/PlayerRepositoryCacheTest.java</include>
                                  <include>**/IncrementalLiveMatchServiceTest.java</include>
                                  <include>**/RetainedScreenStoreTest.java</include>
+                                 <include>**/TopFivePopulationDatasetTest.java</include>
                             </includes>
                         </configuration>
                     </plugin>

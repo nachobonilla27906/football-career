@@ -14,12 +14,19 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
 public class DataSeeder {
 
     public static void seed() {
+
+        boolean compact = Boolean.getBoolean("footballcareer.seed.compact");
 
         SeasonRepository seasonRepository = new SeasonRepository();
         LeagueRepository leagueRepository = new LeagueRepository();
@@ -39,8 +46,8 @@ public class DataSeeder {
         Map<String, League> leagues =
                 seedLeagues(leagueRepository);
 
-        Map<String, Team> teams =
-                seedTeams(teamRepository);
+        Map<String, Team> teams = seedTeams(teamRepository, compact
+                ? "data/teams.csv" : "data/teams_top5_2026_27.csv");
 
         Map<String, Competition> competitions =
                 seedCompetitions(
@@ -52,32 +59,22 @@ public class DataSeeder {
         seedCompetitionTeams(
                 competitionTeamRepository,
                 competitions,
-                teams
+                teams,
+                compact ? "data/competition_teams.csv"
+                        : "data/competition_teams_top5_2026_27.csv"
         );
 
-        seedPlayers(
-                playerRepository,
-                playerTeamRepository,
-                seasons,
-                teams,
-                "data/players.csv"
-        );
+        if (compact) {
+            seedPlayers(playerRepository, playerTeamRepository, seasons, teams, "data/players.csv");
+            seedPlayers(playerRepository, playerTeamRepository, seasons, teams, "data/players_premier_league.csv");
+            seedPlayers(playerRepository, playerTeamRepository, seasons, teams, "data/players_top5_2025_26.csv");
+        } else {
+            seedPlayersBulk(seasons, teams, "data/players_top5_2026_27.csv");
+        }
 
-        seedPlayers(
-                playerRepository,
-                playerTeamRepository,
-                seasons,
-                teams,
-                "data/players_premier_league.csv"
-        );
-
-        seedPlayers(
-                playerRepository,
-                playerTeamRepository,
-                seasons,
-                teams,
-                "data/players_top5_2025_26.csv"
-        );
+        if (!compact) {
+            seasons.values().forEach(season -> new EuropeanCompetitionSeeder().seed(season));
+        }
 
         Season contractSeason = seasons.values().stream()
                 .findFirst().orElseThrow();
@@ -166,11 +163,15 @@ public class DataSeeder {
     private static void seedCompetitionTeams(
             CompetitionTeamRepository repository,
             Map<String, Competition> competitions,
-            Map<String, Team> teams
+            Map<String, Team> teams,
+            String resourcePath
     ) {
 
+        competitions.values().forEach(competition ->
+                repository.clearTeams(competition.getId()));
+
         try (BufferedReader reader =
-                     openFile("data/competition_teams.csv")) {
+                     openFile(resourcePath)) {
 
             String line = reader.readLine();
 
@@ -354,13 +355,14 @@ public class DataSeeder {
     }
 
     private static Map<String, Team> seedTeams(
-            TeamRepository repository
+            TeamRepository repository,
+            String resourcePath
     ) {
 
         Map<String, Team> teams = new HashMap<>();
 
         try (BufferedReader reader =
-                     openFile("data/teams.csv")) {
+                     openFile(resourcePath)) {
 
             String line = reader.readLine();
 
@@ -446,16 +448,13 @@ public class DataSeeder {
                 String lastName = data[1];
                 LocalDate birthDate = LocalDate.parse(data[2]);
 
-                Player player =
-                        playerRepository.findByIdentity(
+                Player player = playerRepository.findByIdentity(
                                 firstName,
                                 lastName,
                                 birthDate
                         );
 
-                if (player == null) {
-
-                    player = new Player(
+                Player seedPlayer = new Player(
                             0,
                             firstName,
                             lastName,
@@ -474,10 +473,18 @@ public class DataSeeder {
                             Double.parseDouble(data[14]),
                             Double.parseDouble(data[15])
                     );
-                    player.setHeightCm(heightFor(player.getPosition(), firstName + lastName));
-                    player.setSecondaryPosition(secondaryPosition(player.getPosition()));
+                seedPlayer.setHeightCm(data.length > 17 && !data[17].isBlank()
+                        ? Integer.parseInt(data[17])
+                        : heightFor(seedPlayer.getPosition(), firstName + lastName));
+                seedPlayer.setSecondaryPosition(secondaryPosition(seedPlayer.getPosition()));
 
+                if (player == null) {
+                    player = seedPlayer;
                     playerRepository.save(player);
+                } else {
+                    seedPlayer.setId(player.getId());
+                    playerRepository.updateSeedData(seedPlayer);
+                    player = seedPlayer;
                 }
 
                 String teamShortName = data[16];
@@ -525,6 +532,161 @@ public class DataSeeder {
             case LB, RB -> 177; default -> 175;
         };
         return base + Math.floorMod(identity.hashCode(), 7) - 3;
+    }
+
+    private static void seedPlayersBulk(Map<String, Season> seasons, Map<String, Team> teams,
+            String resourcePath) {
+        Season season = seasons.values().stream().findFirst().orElseThrow();
+        String insertSql = """
+                INSERT INTO players (first_name, last_name, birth_date, nationality, position,
+                    preferred_foot, height_cm, secondary_position, overall, potential, pace,
+                    shooting, passing, dribbling, defending, physical, market_value, salary)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        String updateSql = """
+                UPDATE players SET nationality=?, position=?, preferred_foot=?, height_cm=?,
+                    secondary_position=?, overall=?, potential=?, pace=?, shooting=?, passing=?,
+                    dribbling=?, defending=?, physical=?, market_value=?, salary=? WHERE id=?
+                """;
+        try (BufferedReader reader = openFile(resourcePath);
+             Connection connection = Database.getConnection();
+             PreparedStatement find = connection.prepareStatement(
+                     "SELECT id FROM players WHERE first_name=? AND last_name=? AND birth_date=?");
+             PreparedStatement insert = connection.prepareStatement(insertSql,
+                     Statement.RETURN_GENERATED_KEYS);
+             PreparedStatement update = connection.prepareStatement(updateSql);
+             PreparedStatement initial = connection.prepareStatement("""
+                     INSERT INTO initial_player_team (player_id, team_id, start_date) VALUES (?, ?, ?)
+                     ON CONFLICT(player_id) DO UPDATE SET team_id=excluded.team_id,
+                         start_date=excluded.start_date
+                     """);
+             PreparedStatement closeOld = connection.prepareStatement("""
+                     UPDATE player_team SET end_date=? WHERE player_id=? AND end_date IS NULL
+                         AND team_id<>?
+                     """);
+             PreparedStatement assign = connection.prepareStatement("""
+                     INSERT INTO player_team (player_id, team_id, start_date, end_date)
+                     VALUES (?, ?, ?, NULL)
+                     ON CONFLICT(player_id, team_id, start_date) DO UPDATE SET end_date=NULL
+                     """)) {
+            connection.setAutoCommit(false);
+            java.util.Set<Long> desiredPlayerIds = new java.util.HashSet<>();
+            reader.readLine();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) continue;
+                String[] data = line.split(",", -1);
+                Player player = playerFromData(data);
+                find.setString(1, player.getFirstName()); find.setString(2, player.getLastName());
+                find.setString(3, player.getBirthDate().toString());
+                try (ResultSet result = find.executeQuery()) {
+                    if (result.next()) {
+                        player.setId(result.getLong(1)); bindPlayerUpdate(update, player);
+                        update.executeUpdate();
+                    } else {
+                        bindPlayerInsert(insert, player); insert.executeUpdate();
+                        try (ResultSet keys = insert.getGeneratedKeys()) {
+                            if (!keys.next()) throw new SQLException("Missing generated player id");
+                            player.setId(keys.getLong(1));
+                        }
+                    }
+                }
+                desiredPlayerIds.add(player.getId());
+                Team team = teams.get(data[16]);
+                if (team == null) throw new IllegalStateException("Team not found: " + data[16]);
+                String date = season.getStartDate().toString();
+                initial.setLong(1, player.getId()); initial.setLong(2, team.getId());
+                initial.setString(3, date); initial.executeUpdate();
+                closeOld.setString(1, date); closeOld.setLong(2, player.getId());
+                closeOld.setLong(3, team.getId()); closeOld.executeUpdate();
+                assign.setLong(1, player.getId()); assign.setLong(2, team.getId());
+                assign.setString(3, date); assign.executeUpdate();
+            }
+            removeLegacySeedMemberships(connection, desiredPlayerIds);
+            connection.commit();
+            PlayerRepository.clearReadCache();
+        } catch (IOException | SQLException exception) {
+            throw new RuntimeException("Could not bulk seed players.", exception);
+        }
+    }
+
+    /**
+     * A full population replaces the old compact roster. Players are retained as historical
+     * entities, but obsolete seed memberships must not leak into new or existing careers.
+     */
+    private static void removeLegacySeedMemberships(Connection connection,
+            java.util.Set<Long> desiredPlayerIds) throws SQLException {
+        try (Statement setup = connection.createStatement()) {
+            setup.executeUpdate("DROP TABLE IF EXISTS temp.desired_seed_players");
+            setup.executeUpdate("CREATE TEMP TABLE desired_seed_players "
+                    + "(player_id INTEGER PRIMARY KEY)");
+        }
+        try (PreparedStatement desired = connection.prepareStatement(
+                "INSERT INTO desired_seed_players (player_id) VALUES (?)")) {
+            for (Long playerId : desiredPlayerIds) {
+                desired.setLong(1, playerId);
+                desired.addBatch();
+            }
+            desired.executeBatch();
+        }
+        String stalePlayers = """
+                SELECT ip.player_id FROM initial_player_team ip
+                LEFT JOIN desired_seed_players desired ON desired.player_id = ip.player_id
+                WHERE desired.player_id IS NULL
+                """;
+        try (Statement cleanup = connection.createStatement()) {
+            cleanup.executeUpdate("DELETE FROM career_player_team WHERE player_id IN ("
+                    + stalePlayers + ")");
+            cleanup.executeUpdate("DELETE FROM player_team WHERE player_id IN ("
+                    + stalePlayers + ")");
+            cleanup.executeUpdate("DELETE FROM initial_player_team WHERE player_id IN ("
+                    + stalePlayers + ")");
+        }
+    }
+
+    private static Player playerFromData(String[] data) {
+        Player player = new Player(0, data[0], data[1], LocalDate.parse(data[2]), data[3],
+                Position.valueOf(data[4]), PreferredFoot.valueOf(data[5]),
+                Integer.parseInt(data[6]), Integer.parseInt(data[7]), Integer.parseInt(data[8]),
+                Integer.parseInt(data[9]), Integer.parseInt(data[10]), Integer.parseInt(data[11]),
+                Integer.parseInt(data[12]), Integer.parseInt(data[13]), Double.parseDouble(data[14]),
+                Double.parseDouble(data[15]));
+        player.setHeightCm(data.length > 17 ? Integer.parseInt(data[17])
+                : heightFor(player.getPosition(), data[0] + data[1]));
+        player.setSecondaryPosition(secondaryPosition(player.getPosition()));
+        return player;
+    }
+
+    private static void bindPlayerInsert(PreparedStatement statement, Player player)
+            throws SQLException {
+        statement.setString(1, player.getFirstName()); statement.setString(2, player.getLastName());
+        statement.setString(3, player.getBirthDate().toString());
+        statement.setString(4, player.getNationality()); statement.setString(5, player.getPosition().name());
+        statement.setString(6, player.getPreferredFoot().name()); statement.setInt(7, player.getHeightCm());
+        bindNullablePosition(statement, 8, player); statement.setInt(9, player.getOverall());
+        statement.setInt(10, player.getPotential()); statement.setInt(11, player.getPace());
+        statement.setInt(12, player.getShooting()); statement.setInt(13, player.getPassing());
+        statement.setInt(14, player.getDribbling()); statement.setInt(15, player.getDefending());
+        statement.setInt(16, player.getPhysical()); statement.setDouble(17, player.getMarketValue());
+        statement.setDouble(18, player.getSalary());
+    }
+
+    private static void bindPlayerUpdate(PreparedStatement statement, Player player)
+            throws SQLException {
+        statement.setString(1, player.getNationality()); statement.setString(2, player.getPosition().name());
+        statement.setString(3, player.getPreferredFoot().name()); statement.setInt(4, player.getHeightCm());
+        bindNullablePosition(statement, 5, player); statement.setInt(6, player.getOverall());
+        statement.setInt(7, player.getPotential()); statement.setInt(8, player.getPace());
+        statement.setInt(9, player.getShooting()); statement.setInt(10, player.getPassing());
+        statement.setInt(11, player.getDribbling()); statement.setInt(12, player.getDefending());
+        statement.setInt(13, player.getPhysical()); statement.setDouble(14, player.getMarketValue());
+        statement.setDouble(15, player.getSalary()); statement.setLong(16, player.getId());
+    }
+
+    private static void bindNullablePosition(PreparedStatement statement, int index, Player player)
+            throws SQLException {
+        if (player.getSecondaryPosition() == null) statement.setNull(index, java.sql.Types.VARCHAR);
+        else statement.setString(index, player.getSecondaryPosition().name());
     }
 
     private static Position secondaryPosition(Position position) {

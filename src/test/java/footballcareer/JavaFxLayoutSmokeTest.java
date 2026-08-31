@@ -5,6 +5,7 @@ import footballcareer.model.Season;
 import footballcareer.model.Team;
 import footballcareer.ui.CareerShellView;
 import footballcareer.ui.NavigationState;
+import footballcareer.ui.UiTheme;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -37,7 +38,7 @@ class JavaFxLayoutSmokeTest {
     }
 
     @Test
-    void realShellFitsAndNavigatesAt1280x720() throws Exception {
+    void realShellFitsAndNavigatesAcrossSupportedViewportMatrix() throws Exception {
         AtomicBoolean navigated = new AtomicBoolean();
         AtomicBoolean exited = new AtomicBoolean();
         runFx(() -> {
@@ -55,18 +56,22 @@ class JavaFxLayoutSmokeTest {
                     new CareerShellView.NavigationItem("PERSONALIZAR", false, () -> {})),
                     List.of(new CareerShellView.NavigationItem("CALENDARIO", false, () -> {})),
                     () -> {}, () -> exited.set(true), content, "dashboard", new NavigationState());
-            Scene scene = new Scene(root, 1280, 720);
-            scene.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
+            Scene scene = new Scene(root, 1280, 720); UiTheme.install(scene);
             Stage stage = new Stage(); stage.setScene(scene); stage.show();
-            root.applyCss(); root.layout();
-            Button exit = (Button) root.lookup(".exit-button");
+            for (int[] viewport : new int[][] {{1280, 720}, {1600, 900}, {1920, 1080}}) {
+                stage.setWidth(viewport[0]); stage.setHeight(viewport[1]);
+                root.applyCss(); root.layout();
+                Button exit = (Button) root.lookup(".exit-button");
+                assertNotNull(exit);
+                assertTrue(exit.localToScene(exit.getBoundsInLocal()).getMaxX() <= scene.getWidth());
+                assertTrue(exit.localToScene(exit.getBoundsInLocal()).getMaxY() <= scene.getHeight());
+                WritableImage image = scene.snapshot(null);
+                assertEquals((int) scene.getWidth(), (int) image.getWidth());
+                assertEquals((int) scene.getHeight(), (int) image.getHeight());
+            }
             Button central = (Button) root.lookup(".area-button-active");
-            assertNotNull(exit); assertNotNull(central);
-            assertTrue(exit.localToScene(exit.getBoundsInLocal()).getMaxX() <= 1280);
-            assertTrue(exit.localToScene(exit.getBoundsInLocal()).getMaxY() <= 720);
-            WritableImage image = scene.snapshot(null);
-            assertEquals(1280, (int) image.getWidth()); assertEquals(720, (int) image.getHeight());
-            central.fire(); exit.fire();
+            Button exit = (Button) root.lookup(".exit-button");
+            assertNotNull(central); assertNotNull(exit); central.fire(); exit.fire();
             assertTrue(navigated.get()); assertTrue(exited.get());
             stage.close();
         });

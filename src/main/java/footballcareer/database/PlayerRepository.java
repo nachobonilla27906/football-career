@@ -145,6 +145,33 @@ public class PlayerRepository {
         }
     }
 
+    public void updateSeedData(Player player) {
+        String sql = """
+                UPDATE players SET nationality = ?, position = ?, preferred_foot = ?,
+                    height_cm = ?, secondary_position = ?, overall = ?, potential = ?,
+                    pace = ?, shooting = ?, passing = ?, dribbling = ?, defending = ?,
+                    physical = ?, market_value = ?, salary = ? WHERE id = ?
+                """;
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, player.getNationality());
+            statement.setString(2, player.getPosition().name());
+            statement.setString(3, player.getPreferredFoot().name());
+            statement.setInt(4, player.getHeightCm());
+            if (player.getSecondaryPosition() == null) statement.setNull(5, java.sql.Types.VARCHAR);
+            else statement.setString(5, player.getSecondaryPosition().name());
+            statement.setInt(6, player.getOverall()); statement.setInt(7, player.getPotential());
+            statement.setInt(8, player.getPace()); statement.setInt(9, player.getShooting());
+            statement.setInt(10, player.getPassing()); statement.setInt(11, player.getDribbling());
+            statement.setInt(12, player.getDefending()); statement.setInt(13, player.getPhysical());
+            statement.setDouble(14, player.getMarketValue()); statement.setDouble(15, player.getSalary());
+            statement.setLong(16, player.getId()); statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not refresh seeded player.", exception);
+        }
+        clearReadCache();
+    }
+
     public Player findByIdentity(
             String firstName,
             String lastName,

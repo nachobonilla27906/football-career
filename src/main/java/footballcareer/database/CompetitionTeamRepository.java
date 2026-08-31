@@ -16,6 +16,17 @@ import java.util.Map;
 
 public class CompetitionTeamRepository {
 
+    public void clearTeams(long competitionId) {
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "DELETE FROM competition_teams WHERE competition_id = ?")) {
+            statement.setLong(1, competitionId);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not clear competition teams.", exception);
+        }
+    }
+
     public Map<Long, String> findLeagueNamesByTeam(long seasonId) {
         String sql = """
                 SELECT ct.team_id, c.name
@@ -140,6 +151,7 @@ public class CompetitionTeamRepository {
                     c.name,
                     c.country,
                     c.tier,
+                    c.format,
                     s.id AS season_id,
                     s.start_year,
                     s.end_year,
@@ -173,13 +185,15 @@ public class CompetitionTeamRepository {
                     );
                     season.setFinished(resultSet.getInt("finished") == 1);
 
-                    competitions.add(new Competition(
+                    Competition competition = new Competition(
                             resultSet.getLong("id"),
                             resultSet.getString("name"),
                             resultSet.getString("country"),
                             resultSet.getInt("tier"),
                             season
-                    ));
+                    );
+                    competition.setFormat(resultSet.getString("format"));
+                    competitions.add(competition);
                 }
             }
 

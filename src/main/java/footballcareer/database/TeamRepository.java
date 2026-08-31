@@ -136,6 +136,27 @@ public class TeamRepository {
         }
     }
 
+    public List<Team> findCompetitionTeamsBySeason(long seasonId) {
+        String sql = """
+                SELECT DISTINCT t.* FROM teams t
+                JOIN competition_teams ct ON ct.team_id = t.id
+                JOIN competitions c ON c.id = ct.competition_id
+                WHERE c.season_id = ?
+                ORDER BY t.country, t.name
+                """;
+        List<Team> currentTeams = new ArrayList<>();
+        try (Connection connection = Database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, seasonId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) currentTeams.add(mapTeam(resultSet));
+            }
+            return currentTeams;
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not load current competition teams.", exception);
+        }
+    }
+
     private Team mapTeam(ResultSet resultSet) throws SQLException {
 
         Team team = new Team();

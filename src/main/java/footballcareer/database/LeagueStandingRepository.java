@@ -92,6 +92,7 @@ public class LeagueStandingRepository {
         if (!match.isPlayed()) {
             throw new IllegalArgumentException("Match has not been played.");
         }
+        if (!isStandingMatch(match)) return;
         // Career standings are derived from that career's match results. Writing to
         // the shared seed table here would leak points into every other save.
         if (CareerContext.getCareerId() != null) return;
@@ -148,7 +149,7 @@ public class LeagueStandingRepository {
             byTeam.put(team.getId(), row);
         }
         for (Match match : new MatchRepository().findByCompetition(competitionId)) {
-            if (!match.isPlayed()) continue;
+            if (!match.isPlayed() || !isStandingMatch(match)) continue;
             applyDerivedResult(byTeam.get(match.getHomeTeam().getId()),
                     match.getHomeGoals(), match.getAwayGoals());
             applyDerivedResult(byTeam.get(match.getAwayTeam().getId()),
@@ -161,6 +162,10 @@ public class LeagueStandingRepository {
                 .thenComparing(Comparator.comparingInt(
                         LeagueStanding::getGoalsFor).reversed())
                 .thenComparing(row -> row.getTeam().getName())).toList();
+    }
+
+    private boolean isStandingMatch(Match match) {
+        return "LEAGUE".equals(match.getStage()) || "LEAGUE_PHASE".equals(match.getStage());
     }
 
     private void applyDerivedResult(LeagueStanding row, int goalsFor, int goalsAgainst) {

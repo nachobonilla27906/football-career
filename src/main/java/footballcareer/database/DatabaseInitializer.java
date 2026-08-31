@@ -76,6 +76,14 @@ public class DatabaseInitializer {
                 addColumnIfMissing(statement, "career_contracts", "squad_role TEXT NOT NULL DEFAULT 'ROTATION'");
                 addColumnIfMissing(statement, "players", "height_cm INTEGER NOT NULL DEFAULT 180");
                 addColumnIfMissing(statement, "players", "secondary_position TEXT");
+                addColumnIfMissing(statement, "competitions", "format TEXT NOT NULL DEFAULT 'DOMESTIC_LEAGUE'");
+                addColumnIfMissing(statement, "matches", "stage TEXT NOT NULL DEFAULT 'LEAGUE'");
+                addColumnIfMissing(statement, "matches", "career_id INTEGER");
+                statement.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS unique_scoped_fixture
+                        ON matches(competition_id, home_team_id, away_team_id,
+                                   stage, COALESCE(career_id, 0))
+                        """);
                 addColumnIfMissing(statement, "transfer_offers", "upfront_percent INTEGER NOT NULL DEFAULT 100");
                 addColumnIfMissing(statement, "transfer_offers", "appearance_bonus REAL NOT NULL DEFAULT 0");
                 for (String table : new String[]{"match_team_stats", "career_match_team_stats"}) {
@@ -120,6 +128,7 @@ public class DatabaseInitializer {
 
         String[] tables = {
                 "training_sessions",
+                "european_ties",
                 "career_youth_candidates",
                 "career_staff",
                 "career_manager_reputation",

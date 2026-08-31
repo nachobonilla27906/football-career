@@ -104,6 +104,9 @@ class MatchDayServiceTest {
         assertFalse(matchRepository.findById(controlledMatch.getId()).isPlayed());
         assertFalse(background.isEmpty());
         background.forEach(match -> {
+            assertTrue(new MatchEventRepository().findByMatch(match.getId()).isEmpty());
+            assertTrue(new MatchTeamStatsRepository().findByMatch(match.getId()).isEmpty());
+            new footballcareer.service.BackgroundMatchReportService().prepare(match);
             java.util.List<MatchEvent> events = new MatchEventRepository()
                     .findByMatch(match.getId());
             assertEquals(match.getHomeGoals() + match.getAwayGoals(), events.stream()

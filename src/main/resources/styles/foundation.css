@@ -1,0 +1,73 @@
+.root {
+    -fx-font-family: "Barlow";
+    -fx-background-color: -fc-bg-0;
+    -fx-text-fill: -fc-text;
+}
+.page-title, .hero-title, .form-title, .shell-wordmark, .match-team-name,
+.market-player-name, .standing-club-name, .squad-player-name, .squad-detail-name,
+.score-number, .stat-value, .dashboard-metric-value {
+    -fx-font-family: "Barlow Condensed";
+}
+.label { -fx-text-fill: -fc-text-soft; }
+.page-title, .hero-title, .form-title { -fx-text-fill: -fc-text; }
+.page-subtitle, .muted-label { -fx-text-fill: -fc-text-muted; }
+.panel-title, .stat-title, .eyebrow { -fx-text-fill: -fc-coral; }
+
+.button {
+    -fx-font-family: "Barlow"; -fx-font-weight: 700;
+    -fx-background-radius: 8px; -fx-border-radius: 8px;
+    -fx-cursor: hand;
+}
+.primary-button { -fx-background-color: -fc-coral; -fx-text-fill: white; }
+.primary-button:hover { -fx-background-color: -fc-coral-hover; }
+.secondary-button, .ghost-button {
+    -fx-background-color: -fc-bg-3; -fx-border-color: -fc-line;
+    -fx-text-fill: -fc-text-soft;
+}
+.secondary-button:hover, .ghost-button:hover {
+    -fx-background-color: -fc-bg-hover; -fx-border-color: -fc-line-strong;
+    -fx-text-fill: -fc-text;
+}
+.button:focused, .text-field:focused, .combo-box:focused, .list-view:focused {
+    -fx-border-color: -fc-coral;
+}
+.button:disabled { -fx-opacity: 0.42; -fx-cursor: default; }
+
+.text-field, .combo-box, .date-picker, .list-view, .table-view {
+    -fx-background-color: -fc-bg-2; -fx-border-color: -fc-line;
+    -fx-background-radius: 8px; -fx-border-radius: 8px;
+    -fx-text-fill: -fc-text;
+}
+.text-field { -fx-prompt-text-fill: -fc-text-muted; }
+.combo-box-popup .list-view { -fx-background-color: -fc-bg-2; -fx-border-color: -fc-line-strong; }
+.list-cell, .combo-box-popup .list-cell {
+    -fx-background-color: -fc-bg-2; -fx-text-fill: -fc-text-soft;
+}
+.list-cell:filled:hover { -fx-background-color: -fc-bg-hover; }
+.list-cell:filled:selected { -fx-background-color: -fc-burgundy; -fx-text-fill: white; }
+
+.scroll-bar:vertical, .scroll-bar:horizontal { -fx-background-color: transparent; }
+.scroll-bar .track { -fx-background-color: -fc-bg-1; -fx-background-radius: 8px; }
+.scroll-bar .thumb { -fx-background-color: #444751; -fx-background-radius: 8px; }
+.scroll-bar .thumb:hover { -fx-background-color: -fc-coral; }
+.scroll-bar .increment-button, .scroll-bar .decrement-button {
+    -fx-background-color: transparent; -fx-padding: 2px;
+}
+.scroll-pane, .scroll-pane > .viewport { -fx-background-color: -fc-bg-1; }
+
+.tooltip {
+    -fx-background-color: #20222a; -fx-text-fill: -fc-text;
+    -fx-background-radius: 8px; -fx-border-color: -fc-line-strong;
+    -fx-border-radius: 8px; -fx-padding: 8px 10px;
+}
+.in-app-overlay { -fx-background-color: rgba(4,5,8,0.88); }
+.in-app-dialog {
+    -fx-background-color: -fc-bg-3; -fx-border-color: -fc-burgundy;
+    -fx-background-radius: 16px; -fx-border-radius: 16px;
+}
+.separator .line { -fx-border-color: -fc-line; }
+.navigation-icon { -fx-fill: -fc-text-muted; }
+.area-button:hover .navigation-icon, .side-nav-button:hover .navigation-icon,
+.area-button-active .navigation-icon, .side-nav-button-active .navigation-icon {
+    -fx-fill: -fc-coral;
+}

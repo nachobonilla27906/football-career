@@ -28,14 +28,20 @@ public final class CareerShellView {
                 "area-button-active");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
+        mainNavigation.getChildren().add(spacer);
+        VBox subNavigation = verticalNavigation(subItems);
         Button exit = button("GUARDAR Y SALIR", "exit-button", exitAction);
-        mainNavigation.getChildren().addAll(spacer, exit);
-        HBox subNavigation = navigation(subItems, "sub-navigation", "subnav-button",
-                "subnav-button-active");
+        VBox club = new VBox(8, TeamCrestView.create(career.getControlledTeam(), 92),
+                label(career.getControlledTeam().getName(), "sidebar-club-name"),
+                label(career.getManagerName() + "  ·  MÁNAGER", "sidebar-manager"));
+        club.setAlignment(Pos.CENTER); Region sideSpacer = new Region(); VBox.setVgrow(sideSpacer, Priority.ALWAYS);
+        VBox sidebar = new VBox(18, club, subNavigation, sideSpacer, exit);
+        sidebar.getStyleClass().add("career-sidebar"); sidebar.setPrefWidth(205);
 
         BorderPane shell = new BorderPane();
         shell.getStyleClass().add("app-shell");
-        shell.setTop(new VBox(header, mainNavigation, subNavigation));
+        shell.setTop(new VBox(header, mainNavigation));
+        shell.setLeft(sidebar);
         ScrollPane scroll = content instanceof ScrollPane existing
                 ? existing : new ScrollPane(content);
         scroll.setFitToWidth(true);
@@ -54,7 +60,7 @@ public final class CareerShellView {
 
     private HBox header(Career career, int notificationCount, Runnable notificationAction) {
         Label wordmark = label("FC//CAREER", "shell-wordmark");
-        Label alpha = label("ALPHA 1.5", "shell-alpha");
+        Label alpha = label("BETA 0.1", "shell-alpha");
         VBox identity = new VBox(2,
                 label(career.getControlledTeam().getShortName() + "  //  "
                         + career.getControlledTeam().getName(), "shell-club"),
@@ -79,29 +85,28 @@ public final class CareerShellView {
         navigation.getStyleClass().add(containerStyle);
         for (NavigationItem item : items) {
             Button button = button(navigationLabel(item.text()), buttonStyle, item.action());
+            button.setGraphic(NavigationIcon.create(item.text()));
             if (item.selected()) button.getStyleClass().add(selectedStyle);
             navigation.getChildren().add(button);
         }
         return navigation;
     }
 
+    private VBox verticalNavigation(List<NavigationItem> items) {
+        VBox navigation = new VBox(3);
+        navigation.getStyleClass().add("side-navigation");
+        for (NavigationItem item : items) {
+            Button button = button(navigationLabel(item.text()), "side-nav-button", item.action());
+            button.setGraphic(NavigationIcon.create(item.text()));
+            button.setMaxWidth(Double.MAX_VALUE);
+            if (item.selected()) button.getStyleClass().add("side-nav-button-active");
+            navigation.getChildren().add(button);
+        }
+        return navigation;
+    }
+
     public static String navigationLabel(String text) {
-        String base = text.contains("  //  ") ? text.substring(0, text.indexOf("  //  ")) : text;
-        String icon = switch (base) {
-            case "CENTRAL" -> "⌂";
-            case "PLANTILLA", "JUGADORES" -> "◉";
-            case "TRASPASOS", "MERCADO" -> "⇄";
-            case "OFICINA" -> "▣";
-            case "PERSONALIZAR", "AJUSTES" -> "⚙";
-            case "CALENDARIO" -> "▦";
-            case "CLASIFICACIÓN", "RESULTADOS" -> "≡";
-            case "BANDEJA" -> "●";
-            case "ALINEACIÓN" -> "⌘";
-            case "ENTRENAMIENTO", "MÉDICO" -> "+";
-            case "VENTAS", "OFERTAS", "HISTORIAL" -> "›";
-            default -> "·";
-        };
-        return icon + "  " + text;
+        return text;
     }
 
     private Label label(String text, String style) {

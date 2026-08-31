@@ -32,7 +32,11 @@ public class FootballWorldService {
             var teams = competitionTeamRepository
                     .findTeamsByCompetition(competition.getId());
             standingRepository.initialize(competition, teams);
-            scheduleService.generateLeagueSchedule(competition);
+            if (competition.isEuropean()) {
+                scheduleService.generateEuropeanLeaguePhase(competition);
+            } else {
+                scheduleService.generateLeagueSchedule(competition);
+            }
         }
     }
 }

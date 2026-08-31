@@ -5,6 +5,7 @@ import footballcareer.database.CompetitionTeamRepository;
 import footballcareer.database.DatabaseInitializer;
 import footballcareer.database.MatchRepository;
 import footballcareer.database.SeasonRepository;
+import footballcareer.database.TeamRepository;
 import footballcareer.model.Competition;
 import footballcareer.model.Match;
 import footballcareer.model.Season;
@@ -78,6 +79,24 @@ class ScheduleServiceTest {
                         .findByCompetition(laLiga.getId())
                         .size()
         );
+    }
+
+    @Test
+    void shouldCompleteScheduleWhenNewClubJoinsPopulatedCompetition() {
+        Competition laLiga = competitionRepository
+                .findByNameAndSeason("LaLiga", season.getId());
+        List<Match> original = scheduleService.generateLeagueSchedule(laLiga);
+        Set<Long> originalIds = original.stream().map(Match::getId).collect(
+                java.util.stream.Collectors.toSet());
+        var city = new TeamRepository().findByShortName("MCI");
+        new CompetitionTeamRepository().addTeamToCompetition(laLiga.getId(), city.getId());
+
+        List<Match> completed = scheduleService.generateLeagueSchedule(laLiga);
+
+        assertEquals(20, completed.size());
+        assertTrue(completed.stream().map(Match::getId).collect(
+                java.util.stream.Collectors.toSet()).containsAll(originalIds));
+        assertValidDoubleRoundRobin(completed, 5);
     }
 
     private void assertValidDoubleRoundRobin(

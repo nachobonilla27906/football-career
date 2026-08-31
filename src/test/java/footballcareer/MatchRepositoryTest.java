@@ -81,6 +81,24 @@ class MatchRepositoryTest {
     }
 
     @Test
+    void shouldFindOnlyTheNextMatchInvolvingRequestedTeam() {
+        Team atletico = saveTeam("Atlético de Madrid", "ATM", 90);
+        Match unrelated = new Match(0, competition, homeTeam, atletico,
+                matchDate.minusDays(2));
+        repository.save(unrelated);
+        Match controlled = createMatch();
+        repository.save(controlled);
+
+        Match next = repository.findNextForTeam(awayTeam.getId(),
+                competition.getSeason().getId(), matchDate.minusDays(3));
+
+        assertNotNull(next);
+        assertEquals(controlled.getId(), next.getId());
+        assertTrue(next.getHomeTeam().getId() == awayTeam.getId()
+                || next.getAwayTeam().getId() == awayTeam.getId());
+    }
+
+    @Test
     void shouldUpdateMatchResult() {
         Match match = createMatch();
         repository.save(match);

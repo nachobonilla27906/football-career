@@ -17,6 +17,8 @@ public class Match {
     private int awayGoals;
 
     private boolean played;
+    private String stage = "LEAGUE";
+    private Long careerId;
 
     public Match() {
     }
@@ -95,4 +97,9 @@ public class Match {
         this.awayGoals = awayGoals;
         this.played = true;
     }
+
+    public String getStage() { return stage; }
+    public void setStage(String stage) { this.stage = stage == null ? "LEAGUE" : stage; }
+    public Long getCareerId() { return careerId; }
+    public void setCareerId(Long careerId) { this.careerId = careerId; }
 }

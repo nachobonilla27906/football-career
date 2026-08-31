@@ -166,6 +166,8 @@ public class CareerService {
     }
 
     public List<Team> getAvailableTeams() {
-        return teamRepository.findAll();
+        Season season = seasonRepository.findFirst();
+        return season == null ? List.of()
+                : teamRepository.findCompetitionTeamsBySeason(season.getId());
     }
 }

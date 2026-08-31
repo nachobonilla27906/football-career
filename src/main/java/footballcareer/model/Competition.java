@@ -11,6 +11,7 @@ public class Competition {
 
     private Season season;
     private League league;
+    private String format = "DOMESTIC_LEAGUE";
 
     public Competition() {
     }
@@ -88,4 +89,12 @@ public class Competition {
     public void setLeague(League league) {
         this.league = league;
     }
+
+    public String getFormat() { return format; }
+
+    public void setFormat(String format) {
+        this.format = format == null ? "DOMESTIC_LEAGUE" : format;
+    }
+
+    public boolean isEuropean() { return "EUROPEAN".equals(format); }
 }

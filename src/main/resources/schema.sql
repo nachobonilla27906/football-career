@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS competitions (
     tier INTEGER NOT NULL,
     season_id INTEGER NOT NULL,
     league_id INTEGER,
+    format TEXT NOT NULL DEFAULT 'DOMESTIC_LEAGUE',
 
     FOREIGN KEY (season_id)
         REFERENCES seasons(id),
@@ -102,6 +103,8 @@ CREATE TABLE IF NOT EXISTS matches (
     away_goals INTEGER NOT NULL DEFAULT 0,
 
     played INTEGER NOT NULL DEFAULT 0,
+    stage TEXT NOT NULL DEFAULT 'LEAGUE',
+    career_id INTEGER,
 
     FOREIGN KEY (competition_id)
         REFERENCES competitions(id),
@@ -115,7 +118,7 @@ CREATE TABLE IF NOT EXISTS matches (
     CHECK (home_team_id <> away_team_id),
     CHECK (home_goals >= 0),
     CHECK (away_goals >= 0),
-    UNIQUE (competition_id, home_team_id, away_team_id)
+    FOREIGN KEY (career_id) REFERENCES careers(id)
 );
 
 CREATE TABLE IF NOT EXISTS initial_player_team (
@@ -150,6 +153,23 @@ CREATE TABLE IF NOT EXISTS career_match_states (
     CHECK (home_goals >= 0),
     CHECK (away_goals >= 0),
     CHECK (played IN (0, 1))
+);
+
+CREATE TABLE IF NOT EXISTS european_ties (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    career_id INTEGER NOT NULL,
+    competition_id INTEGER NOT NULL,
+    stage TEXT NOT NULL,
+    bracket_order INTEGER NOT NULL,
+    home_team_id INTEGER NOT NULL,
+    away_team_id INTEGER NOT NULL,
+    winner_team_id INTEGER,
+    UNIQUE(career_id, competition_id, stage, bracket_order),
+    FOREIGN KEY (career_id) REFERENCES careers(id) ON DELETE CASCADE,
+    FOREIGN KEY (competition_id) REFERENCES competitions(id),
+    FOREIGN KEY (home_team_id) REFERENCES teams(id),
+    FOREIGN KEY (away_team_id) REFERENCES teams(id),
+    FOREIGN KEY (winner_team_id) REFERENCES teams(id)
 );
 
 CREATE TABLE IF NOT EXISTS match_events (

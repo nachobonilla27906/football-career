@@ -21,9 +21,10 @@ public class CompetitionRepository {
                     country,
                     tier,
                     season_id,
-                    league_id
+                    league_id,
+                    format
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """;
 
         try (Connection connection = Database.getConnection();
@@ -48,6 +49,7 @@ public class CompetitionRepository {
                         competition.getLeague().getId()
                 );
             }
+            statement.setString(6, competition.getFormat());
 
             statement.executeUpdate();
 
@@ -77,6 +79,7 @@ public class CompetitionRepository {
                     c.name,
                     c.country,
                     c.tier,
+                    c.format,
                     s.id AS season_id,
                     s.start_year,
                     s.end_year,
@@ -130,6 +133,7 @@ public class CompetitionRepository {
                     c.name,
                     c.country,
                     c.tier,
+                    c.format,
                     s.id AS season_id,
                     s.start_year,
                     s.end_year,
@@ -196,7 +200,7 @@ public class CompetitionRepository {
 
     private String competitionSelect() {
         return """
-                SELECT c.id, c.name, c.country, c.tier,
+                SELECT c.id, c.name, c.country, c.tier, c.format,
                        s.id AS season_id, s.start_year, s.end_year,
                        s.start_date, s.end_date, s.finished,
                        l.id AS league_id, l.name AS league_name,
@@ -253,7 +257,7 @@ public class CompetitionRepository {
             );
         }
 
-        return new Competition(
+        Competition competition = new Competition(
                 resultSet.getLong("id"),
                 resultSet.getString("name"),
                 resultSet.getString("country"),
@@ -261,5 +265,7 @@ public class CompetitionRepository {
                 season,
                 league
         );
+        competition.setFormat(resultSet.getString("format"));
+        return competition;
     }
 }

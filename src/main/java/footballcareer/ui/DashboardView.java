@@ -33,13 +33,14 @@ public final class DashboardView {
                           Consumer<CareerInsightService.Notification> openNotification) {}
 
     public VBox build(Model model, Actions actions) {
-        VBox content = page("CENTRO DE MANDO", model.clubName() + "  •  " + model.seasonName());
-        FlowPane cards = new FlowPane(16, 16,
-                statCard("FECHA", model.date().toString()),
-                statCard("REPUTACIÓN", model.reputation()),
-                statCard("PRESUPUESTO", model.finance()),
-                statCard("POSICIÓN", model.position()));
-        cards.getChildren().forEach(node -> ((Region) node).setPrefWidth(210));
+        VBox content = page("CENTRAL", model.clubName() + "  ·  " + model.seasonName());
+        HBox context = new HBox(0,
+                compactMetric("FECHA", model.date().toString()),
+                compactMetric("POSICIÓN", model.position()),
+                compactMetric("CONFIANZA", model.reputation()),
+                compactMetric("PRESUPUESTO", model.finance()));
+        context.getStyleClass().add("dashboard-context-strip");
+        context.getChildren().forEach(node -> HBox.setHgrow(node, Priority.ALWAYS));
         VBox next = nextMatch(model);
 
         Button advance = button("AVANZAR UN DÍA", "primary-button", actions.advanceDay());
@@ -51,9 +52,11 @@ public final class DashboardView {
         simulate.setDisable(model.nextMatch() == null && !model.matchToday());
         FlowPane actionBar = new FlowPane(12, 12, advance, week, simulate);
 
-        VBox squad = panel("ESTADO DE LA PLANTILLA");
-        squad.getChildren().add(label(model.squadStatus(), "body-label"));
-        VBox form = panel("ÚLTIMOS PARTIDOS");
+        VBox squad = new VBox(5, label("ESTADO DE LA PLANTILLA", "panel-title"),
+                label(model.squadStatus(), "body-label"));
+        squad.getStyleClass().add("dashboard-glance-item");
+        VBox form = new VBox(7, label("FORMA RECIENTE", "panel-title"));
+        form.getStyleClass().add("dashboard-glance-item");
         FlowPane chips = new FlowPane(8, 8);
         if (model.recentForm().isEmpty()) chips.getChildren().add(
                 label("Aún no hay partidos disputados.", "muted-label"));
@@ -67,12 +70,15 @@ public final class DashboardView {
             chips.getChildren().add(chip);
         }
         form.getChildren().add(chips);
-        HBox secondary = new HBox(16, squad, form);
+        HBox secondary = new HBox(0, squad, form);
+        secondary.getStyleClass().add("dashboard-glance-strip");
         HBox.setHgrow(squad, Priority.ALWAYS); HBox.setHgrow(form, Priority.ALWAYS);
 
-        VBox news = panel("NOTICIAS Y ALERTAS");
+        VBox news = panel("ACTUALIDAD DEL CLUB");
         model.news().forEach(item -> news.getChildren().add(label("•  " + item, "news-row")));
-        VBox inbox = panel("NOTIFICACIONES");
+        model.activity().stream().limit(3).forEach(item -> news.getChildren().add(
+                label(item.date() + "  ·  " + item.detail(), "dashboard-activity-line")));
+        VBox inbox = panel("PENDIENTES");
         if (model.notifications().isEmpty()) inbox.getChildren().add(
                 label("Todo al día. No tienes asuntos pendientes.", "muted-label"));
         else {
@@ -81,18 +87,26 @@ public final class DashboardView {
             inbox.getChildren().add(button("VER TODAS  //  " + model.notifications().size(),
                     "ghost-button", actions.openInbox()));
         }
-        HBox management = new HBox(16, news, inbox);
+        HBox management = new HBox(18, news, inbox);
         HBox.setHgrow(news, Priority.ALWAYS); HBox.setHgrow(inbox, Priority.ALWAYS);
         news.setMaxWidth(Double.MAX_VALUE); inbox.setMaxWidth(Double.MAX_VALUE);
+        news.setPrefWidth(620); inbox.setPrefWidth(430);
 
-        content.getChildren().addAll(cards, next, actionBar, secondary, management);
+        content.getChildren().addAll(next, actionBar, context, secondary, management);
         if (model.advanceSummary() != null) {
             VBox summary = panel("RESUMEN DEL AVANCE");
             summary.getChildren().add(label(model.advanceSummary(), "success-feedback"));
             content.getChildren().add(summary);
         }
-        content.getChildren().add(activity(model.activity()));
         return content;
+    }
+
+    private VBox compactMetric(String title, String value) {
+        VBox metric = new VBox(3, label(title, "dashboard-metric-title"),
+                label(value, "dashboard-metric-value"));
+        metric.getStyleClass().add("dashboard-metric");
+        metric.setMaxWidth(Double.MAX_VALUE);
+        return metric;
     }
 
     private VBox nextMatch(Model model) {
@@ -149,8 +163,9 @@ public final class DashboardView {
     }
 
     private VBox team(Team team, boolean controlled) {
-        VBox box = new VBox(8, label(team.getShortName(), controlled
-                ? "team-badge-user" : "team-badge"), label(team.getName(), "match-team-name"));
+        VBox box = new VBox(8, TeamCrestView.create(team, controlled ? 104 : 96),
+                label(team.getName(), "match-team-name"));
+        if (controlled) box.getStyleClass().add("controlled-club-hero");
         box.setAlignment(Pos.CENTER); return box;
     }
 

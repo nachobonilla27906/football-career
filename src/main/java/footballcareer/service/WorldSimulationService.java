@@ -40,8 +40,10 @@ public class WorldSimulationService {
     public List<Match> processDate(LocalDate date) {
         if (date == null) throw new IllegalArgumentException("Date is required.");
         applyDailyEvolution(date);
-        return matchDayService == null ? List.of()
+        List<Match> matches = matchDayService == null ? List.of()
                 : matchDayService.processMatchesOn(date);
+        new EuropeanCompetitionService().progressCurrentCareer(date);
+        return matches;
     }
 
     private void applyDailyEvolution(LocalDate date) {
@@ -60,6 +62,7 @@ public class WorldSimulationService {
                 : matchDayService.processBackgroundMatchesOn(date, controlledTeamId);
         transferAiService.processMarket(date, seasonId, controlledTeamId);
         new TransferObligationService().process(date);
+        new EuropeanCompetitionService().progress(seasonId, date);
         return matches;
     }
 
@@ -71,7 +74,9 @@ public class WorldSimulationService {
     }
 
     public List<Match> simulateControlledMatches(LocalDate date, long controlledTeamId) {
-        return matchDayService == null ? List.of()
+        List<Match> matches = matchDayService == null ? List.of()
                 : matchDayService.processControlledMatchesOn(date, controlledTeamId);
+        new EuropeanCompetitionService().progressCurrentCareer(date);
+        return matches;
     }
 }
