@@ -1,4 +1,4 @@
-# ⚽ Football Career Manager
+# ⚽ Football Career Manager (Discontinued)
 
 **Football Career Manager** is a personal project developed in Java with the goal of creating a football management and career simulation game inspired by games such as Football Manager.
 
